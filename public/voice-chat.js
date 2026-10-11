@@ -8,7 +8,7 @@ style.textContent += "\n#dm-call{display:inline-flex;align-items:center;gap:7px;
 document.head.appendChild(style);
 const callLayoutStyle=document.createElement("style");
 callLayoutStyle.textContent = `
-#voice-overlay.voice-minimized{inset:auto 16px 16px auto;width:min(360px,calc(100vw - 24px));height:auto;padding:0;display:flex;align-items:stretch;justify-content:stretch;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;opacity:1;pointer-events:none;transition:none}
+#voice-overlay.voice-minimized{inset:auto auto 16px 16px;width:min(360px,calc(100vw - 24px));height:auto;padding:0;display:flex;align-items:stretch;justify-content:stretch;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;opacity:1;pointer-events:none;transition:none}
 #voice-overlay.voice-minimized.hidden{display:none!important}
 #voice-overlay.voice-minimized #voice-window{pointer-events:auto;width:360px;height:76px;min-width:280px;min-height:64px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto;resize:both;transform:none;border-radius:11px;box-shadow:0 12px 38px rgba(0,0,0,.42);}
 #voice-overlay.voice-minimized #voice-stage,#voice-overlay.voice-minimized #voice-note{display:none}
