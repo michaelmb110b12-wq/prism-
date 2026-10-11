@@ -48,6 +48,7 @@ callLayoutStyle.textContent = `
  #voice-remote-shares .voice-remote-tile{height:min(300px,38vh);min-height:170px;flex-basis:100%}
 }
 `;
+callLayoutStyle.textContent += "\n#voice-incoming-prompt{position:fixed;inset:0;z-index:2147483100;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(5,6,10,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}\n#voice-incoming-prompt.visible{display:flex}\n.voice-incoming-card{width:min(360px,calc(100vw - 32px));padding:28px 24px 22px;border:1px solid #ffffff18;border-radius:18px;background:var(--side,#191a20);color:var(--text,#ededf3);box-shadow:0 28px 90px #000a;text-align:center}\n.voice-incoming-icon{display:grid;place-items:center;width:58px;height:58px;margin:0 auto 16px;border-radius:17px;background:color-mix(in srgb,var(--accent,#7868f7) 20%,var(--input,#292b32));color:var(--accent2,#a397ff);font-size:28px}\n.voice-incoming-eyebrow{font-size:10px;letter-spacing:1.7px;font-weight:800;color:var(--dim,#a5a5b5)}\n#voice-incoming-name{margin:7px 0;font-size:22px;overflow-wrap:anywhere}\n.voice-incoming-card p{color:var(--dim,#a5a5b5);font-size:12px;margin:0 0 22px}\n.voice-incoming-actions{display:flex;gap:10px}\n.voice-incoming-actions button{flex:1;min-height:42px;border:0;border-radius:9px;color:white;font-size:13px;font-weight:700;cursor:pointer}\n#voice-incoming-decline{background:#e44855}#voice-incoming-decline:hover{background:#f05a67}\n#voice-incoming-answer{background:#299866}#voice-incoming-answer:hover{background:#31ad77}";
 document.head.appendChild(callLayoutStyle);
 const join = document.createElement("button");
 join.id = "voice-join"; join.type = "button"; join.className = "hidden";
@@ -67,6 +68,13 @@ const shareWindow=document.createElement("aside");
 shareWindow.id="voice-share-window";
 shareWindow.innerHTML='<div id="voice-share-window-head"><span>Live screenshare / camera</span></div><div id="voice-share-window-body"><div id="voice-share-empty">Minimize the call window to keep chatting while video stays here.</div></div>';
 document.body.appendChild(shareWindow);
+const incomingCallPrompt=document.createElement("div");
+incomingCallPrompt.id="voice-incoming-prompt";
+incomingCallPrompt.setAttribute("role","dialog");
+incomingCallPrompt.setAttribute("aria-modal","true");
+incomingCallPrompt.setAttribute("aria-label","Incoming call");
+incomingCallPrompt.innerHTML='<section class="voice-incoming-card"><div class="voice-incoming-icon">☎</div><div class="voice-incoming-eyebrow">INCOMING CALL</div><h2 id="voice-incoming-name">Prism user</h2><p>Someone is calling you.</p><div class="voice-incoming-actions"><button type="button" id="voice-incoming-decline">Decline</button><button type="button" id="voice-incoming-answer">Answer</button></div></section>';
+document.body.appendChild(incomingCallPrompt);
 const $ = id => document.getElementById(id);
 const status = $("voice-status"), title = $("voice-title"), list = $("voice-participants");
 const note = $("voice-note"), mute = $("voice-mute"), deafen = $("voice-deafen");
