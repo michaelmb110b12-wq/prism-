@@ -436,7 +436,17 @@ async function offer(uid,v){
 }
 async function peopleChanged(snap){
  if(!s.joined)return;
- const d=snap.val()||{};s.people=d;
+ const previous=s.people||{};
+ const hadPrevious=s.peopleReady===true;
+ const d=snap.val()||{};
+ s.people=d;s.peopleReady=true;
+ if(hadPrevious){
+  const added=Object.keys(d).some(uid=>uid!==(me&&me.uid)&&(!previous[uid]||previous[uid].session!==d[uid].session));
+  const removed=Object.keys(previous).some(uid=>uid!==(me&&me.uid)&&(!d[uid]||d[uid].session!==previous[uid].session));
+  if(added)playCallSound("join");
+  if(removed)playCallSound("leave");
+ }
+ syncWaitingCallSound();
  Array.from(s.peers.keys()).forEach(uid=>{if(!d[uid]||d[uid].session!==s.peers.get(uid).session)removePeer(uid);});
  Object.keys(d).forEach(uid=>{if(uid===me.uid)return;peer(uid,d[uid]);offer(uid,d[uid]);});
  render();
@@ -519,6 +529,9 @@ async function toggleCamera(){
 }
 async function stop(error){
  s.revision++;
+ stopAllCallSounds();
+ resolveIncomingPrompt(false);
+ s.peopleReady=false;
  const direct = s.directTarget;
  if(s.minimized)setMinimized(false);
  if(s.pr&&s.ph)s.pr.off("value",s.ph);if(s.inbox&&s.ih)s.inbox.off("child_added",s.ih);
@@ -538,6 +551,7 @@ async function stop(error){
 }
 async function start(){
  const runRevision=++s.revision;
+ s.peopleReady=false;
  const r=current();if(!r)return msg("Open a server text channel or direct message first.");
  if(!me||!me.uid||!firebase.auth().currentUser)return msg("Log in to Prism first.");
  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!window.RTCPeerConnection)return msg("Voice requires HTTPS, a microphone, and WebRTC support.");
@@ -616,8 +630,10 @@ async function handleIncomingCall(snap){
  if(seenIncomingCalls.has(inviteId))return;
  seenIncomingCalls.add(inviteId);
  const callerName=String(invite.fromName||"Prism user").slice(0,40);
+ startRepeatingCallSound("incoming");
  let answer=false;
- try{answer=window.confirm(callerName+" is calling you on Prism. Answer the call?");}catch(_){}
+ try{answer=await showIncomingPrompt(callerName);}catch(_){}
+ stopRepeatingCallSound("incoming");
  const latest=await snap.ref.once("value").catch(()=>null);
  const live=latest&&latest.val();
  if(!live||live.status!=="ringing")return;
@@ -650,13 +666,14 @@ async function callUser(uid,name){
  s.inviteStateHandler=snap=>{
   const value=snap.val();
   if(!value||!s.directTarget||s.directTarget.callId!==callId)return;
-  if(value.status==="accepted"){note.textContent=targetName+" answered. Connecting…";}
-  if(value.status==="declined"){stop(targetName+" declined the call.");}
-  if(value.status==="missed"){stop("No answer from "+targetName+".");}
+  if(value.status==="accepted"){stopRepeatingCallSound("waiting");note.textContent=targetName+" answered. Connecting…";}
+  if(value.status==="declined"){stopRepeatingCallSound("waiting");stop(targetName+" declined the call.");}
+  if(value.status==="missed"){stopRepeatingCallSound("waiting");stop("No answer from "+targetName+".");}
  };
  inviteRef.on("value",s.inviteStateHandler);
  try{
   await inviteRef.set({fromUid:me.uid,fromName:me.name,roomSid:room.sid,roomCid:room.cid,status:"ringing",createdAt:Date.now()});
+  startRepeatingCallSound("waiting");
   await start();
   window.setTimeout(async()=>{
    if(!s.directTarget||s.directTarget.callId!==callId)return;
