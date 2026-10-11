@@ -90,6 +90,7 @@ let incomingCallsRef = null;
 const seenIncomingCalls = new Set();
 const callSoundLoops = Object.create(null);
 const activeCallSoundPlayback = new Map();
+const callSoundTokens = Object.create(null);
 let callAudioContext = null;
 let soundDatabasePromise = null;
 let incomingPromptResolver = null;
@@ -166,6 +167,7 @@ function getCallAudioContext(){
  return callAudioContext;
 }
 function stopCallSoundPlayback(type){
+ callSoundTokens[type]=(callSoundTokens[type]||0)+1;
  const current=activeCallSoundPlayback.get(type);
  if(!current)return;
  if(current.audio){try{current.audio.pause();current.audio.currentTime=0;}catch(_){}}
@@ -203,10 +205,12 @@ async function playCallSound(type,overridePrefs){
  const mode=["default","custom","off"].includes(prefs[type])?prefs[type]:"default";
  const volume=Math.max(0,Math.min(100,Number(prefs.volume)||0))/100;
  stopCallSoundPlayback(type);
+ const playbackToken=callSoundTokens[type];
  if(mode==="off"||volume<=0)return;
  if(mode==="custom"){
   try{
    const row=await getCustomCallSound(type);
+   if(playbackToken!==callSoundTokens[type])return;
    if(row&&row.blob){
     const url=URL.createObjectURL(row.blob);
     const audio=new Audio(url);audio.preload="auto";audio.volume=volume;
@@ -215,8 +219,12 @@ async function playCallSound(type,overridePrefs){
     await audio.play().catch(error=>{if(activeCallSoundPlayback.get(type)===playback){activeCallSoundPlayback.delete(type);try{URL.revokeObjectURL(url);}catch(_){}}throw error;});
     return;
    }
-  }catch(error){console.warn("Custom call sound unavailable; using the built-in sound.",error);}
+  }catch(error){
+   if(playbackToken!==callSoundTokens[type])return;
+   console.warn("Custom call sound unavailable; using the built-in sound.",error);
+  }
  }
+ if(playbackToken!==callSoundTokens[type])return;
  playDefaultCallTones(type,volume);
 }
 function startRepeatingCallSound(type){
