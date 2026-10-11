@@ -4122,8 +4122,9 @@ function applyThemeLook(theme, accent, customCSS){
     }
   }
   const accentValue = /^#[\da-f]{3}(?:[\da-f]{3})?$/i.test(String(accent || "")) ? accent : "#5865f2";
-  const declarations = [["--accent", accentValue], ...customVars.entries()]
-    .filter((entry,index,array)=>index===0 || entry[0] !== "--accent");
+  // Preserve the color-picker value by default, but let a custom :root --accent
+  // declaration override it just like the rest of the user's CSS theme variables.
+  const declarations = [["--accent", accentValue], ...customVars.entries()];
   varsStyle.textContent = "html[data-theme], html:not([data-theme]) {\n" +
     declarations.map(([name,value]) => "  " + name + ": " + value + ";").join("\n") +
     "\n}";
