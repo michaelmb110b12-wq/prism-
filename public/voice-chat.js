@@ -85,9 +85,194 @@ const remoteShares = $("voice-remote-shares");
 const voiceStage=$("voice-stage"), callWindow=$("voice-window"), callTopbar=$("voice-topbar");
 const sideShareBody=$("voice-share-window-body"), sideShareEmpty=$("voice-share-empty");
 const localFullscreen=$("voice-local-fullscreen"), minimizeBtn=$("voice-minimize");
-const s = {room:null,session:null,stream:null,screenStream:null,cameraStream:null,joined:false,joining:false,muted:false,deafened:false,people:{},peers:new Map(),pr:null,ownRef:null,inbox:null,ph:null,ih:null,revision:0,directTarget:null,inviteStateRef:null,inviteStateHandler:null,minimized:false,ice:[{urls:"stun:stun.l.google.com:19302"}]};
+const s = {room:null,session:null,stream:null,screenStream:null,cameraStream:null,joined:false,joining:false,muted:false,deafened:false,people:{},peopleReady:false,peers:new Map(),pr:null,ownRef:null,inbox:null,ph:null,ih:null,revision:0,directTarget:null,inviteStateRef:null,inviteStateHandler:null,minimized:false,ice:[{urls:"stun:stun.l.google.com:19302"}]};
 let incomingCallsRef = null;
 const seenIncomingCalls = new Set();
+const callSoundLoops = Object.create(null);
+const activeCallSoundPlayback = new Map();
+let callAudioContext = null;
+let soundDatabasePromise = null;
+let incomingPromptResolver = null;
+let incomingPromptTimeout = null;
+const CALL_SOUND_KEYS = new Set(["incoming","waiting","join","leave"]);
+function getCallSoundPrefs(){
+ let value={};
+ try{if(typeof settings!=="undefined"&&settings.callSounds)value=settings.callSounds;}catch(_){}
+ const mode=key=>["default","custom","off"].includes(value[key])?value[key]:"default";
+ const vol=Number(value.volume);
+ return {incoming:mode("incoming"),waiting:mode("waiting"),join:mode("join"),leave:mode("leave"),volume:Number.isFinite(vol)?Math.max(0,Math.min(100,vol)):65};
+}
+function callSoundDb(){
+ if(soundDatabasePromise)return soundDatabasePromise;
+ soundDatabasePromise=new Promise((resolve,reject)=>{
+  if(!window.indexedDB)return reject(new Error("This browser doesn't support local sound uploads."));
+  const req=indexedDB.open("prism-call-sounds-v1",1);
+  req.onupgradeneeded=()=>{const database=req.result;if(!database.objectStoreNames.contains("clips"))database.createObjectStore("clips",{keyPath:"id"});};
+  req.onsuccess=()=>resolve(req.result);
+  req.onerror=()=>reject(req.error||new Error("Couldn't open local sound storage."));
+ });
+ return soundDatabasePromise;
+}
+function soundClipId(type){return String(me&&me.uid||"guest")+":"+type;}
+async function saveCustomCallSound(type,file){
+ if(!CALL_SOUND_KEYS.has(type))throw new Error("Unknown call sound.");
+ if(!file||!file.size)throw new Error("Choose an audio file first.");
+ if(file.size>5*1024*1024)throw new Error("Choose an audio file smaller than 5 MB.");
+ const audioType=String(file.type||"").toLowerCase();
+ const audioExtension=/\.(mp3|wav|ogg|oga|m4a|aac|opus|webm|flac)$/i.test(String(file.name||""));
+ if(!audioType.startsWith("audio/")&&!audioExtension)throw new Error("Choose an audio file such as MP3, WAV, OGG, M4A, or WebM.");
+ if(!me||!me.uid)throw new Error("Log in before uploading custom call sounds.");
+ const database=await callSoundDb();
+ await new Promise((resolve,reject)=>{
+  const tx=database.transaction("clips","readwrite");
+  tx.objectStore("clips").put({id:soundClipId(type),uid:String(me.uid),type:type,name:String(file.name||"custom audio").slice(0,140),mime:audioType,blob:file,updatedAt:Date.now()});
+  tx.oncomplete=resolve;
+  tx.onerror=()=>reject(tx.error||new Error("Couldn't save that audio file locally."));
+  tx.onabort=()=>reject(tx.error||new Error("Audio upload was cancelled."));
+ });
+ return {name:String(file.name||"custom audio"),size:file.size};
+}
+async function getCustomCallSound(type){
+ if(!CALL_SOUND_KEYS.has(type)||!me||!me.uid)return null;
+ const database=await callSoundDb();
+ return new Promise((resolve,reject)=>{
+  const tx=database.transaction("clips","readonly"),req=tx.objectStore("clips").get(soundClipId(type));
+  req.onsuccess=()=>resolve(req.result||null);
+  req.onerror=()=>reject(req.error||new Error("Couldn't read that audio file."));
+ });
+}
+async function getCustomCallSoundInfo(type){
+ const row=await getCustomCallSound(type);
+ return row?{name:row.name,size:row.blob&&row.blob.size||0}:null;
+}
+async function clearCustomCallSound(type){
+ if(!CALL_SOUND_KEYS.has(type)||!me||!me.uid)return;
+ const database=await callSoundDb();
+ await new Promise((resolve,reject)=>{
+  const tx=database.transaction("clips","readwrite");
+  tx.objectStore("clips").delete(soundClipId(type));
+  tx.oncomplete=resolve;
+  tx.onerror=()=>reject(tx.error||new Error("Couldn't remove that custom sound."));
+ });
+ stopCallSoundPlayback(type);
+}
+function getCallAudioContext(){
+ if(!callAudioContext){
+  const AudioCtx=window.AudioContext||window.webkitAudioContext;
+  if(!AudioCtx)return null;
+  callAudioContext=new AudioCtx();
+ }
+ if(callAudioContext.state==="suspended")callAudioContext.resume().catch(()=>{});
+ return callAudioContext;
+}
+function stopCallSoundPlayback(type){
+ const current=activeCallSoundPlayback.get(type);
+ if(!current)return;
+ if(current.audio){try{current.audio.pause();current.audio.currentTime=0;}catch(_){}}
+ if(current.url){try{URL.revokeObjectURL(current.url);}catch(_){}}
+ (current.oscillators||[]).forEach(osc=>{try{osc.stop();}catch(_){}});
+ activeCallSoundPlayback.delete(type);
+}
+function playDefaultCallTones(type,volume){
+ const ctx=getCallAudioContext();
+ if(!ctx)return;
+ const patterns={
+  incoming:[[523,.18,0],[659,.18,.21],[784,.24,.44],[0,.12,.72],[523,.18,.88],[659,.18,1.09],[784,.24,1.32]],
+  waiting:[[440,.18,0],[523,.18,.23]],
+  join:[[660,.12,0],[880,.16,.14]],
+  leave:[[660,.15,0],[440,.19,.18]]
+ };
+ const pattern=patterns[type]||patterns.join;
+ const playback={oscillators:[]};activeCallSoundPlayback.set(type,playback);
+ pattern.forEach(([frequency,duration,offset])=>{
+  if(!frequency)return;
+  const start=ctx.currentTime+.018+offset;
+  const osc=ctx.createOscillator(),gain=ctx.createGain();
+  osc.type="sine";osc.frequency.setValueAtTime(frequency,start);
+  gain.gain.setValueAtTime(.0001,start);
+  gain.gain.linearRampToValueAtTime(Math.max(.0001,volume*.16),start+.018);
+  gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
+  osc.connect(gain);gain.connect(ctx.destination);playback.oscillators.push(osc);
+  osc.onended=()=>{try{osc.disconnect();gain.disconnect();}catch(_){}};
+  osc.start(start);osc.stop(start+duration+.025);
+ });
+}
+async function playCallSound(type,overridePrefs){
+ if(!CALL_SOUND_KEYS.has(type))return;
+ const prefs=overridePrefs?Object.assign({volume:65,incoming:"default",waiting:"default",join:"default",leave:"default"},overridePrefs):getCallSoundPrefs();
+ const mode=["default","custom","off"].includes(prefs[type])?prefs[type]:"default";
+ const volume=Math.max(0,Math.min(100,Number(prefs.volume)||0))/100;
+ stopCallSoundPlayback(type);
+ if(mode==="off"||volume<=0)return;
+ if(mode==="custom"){
+  try{
+   const row=await getCustomCallSound(type);
+   if(row&&row.blob){
+    const url=URL.createObjectURL(row.blob);
+    const audio=new Audio(url);audio.preload="auto";audio.volume=volume;
+    const playback={audio:audio,url:url,oscillators:[]};activeCallSoundPlayback.set(type,playback);
+    audio.onended=()=>{if(activeCallSoundPlayback.get(type)===playback){activeCallSoundPlayback.delete(type);try{URL.revokeObjectURL(url);}catch(_){}}};
+    await audio.play().catch(error=>{if(activeCallSoundPlayback.get(type)===playback){activeCallSoundPlayback.delete(type);try{URL.revokeObjectURL(url);}catch(_){}}throw error;});
+    return;
+   }
+  }catch(error){console.warn("Custom call sound unavailable; using the built-in sound.",error);}
+ }
+ playDefaultCallTones(type,volume);
+}
+function startRepeatingCallSound(type){
+ if(!CALL_SOUND_KEYS.has(type)||callSoundLoops[type])return;
+ const cadence=type==="incoming"?2600:2500;
+ const repeat=()=>{
+  if(!callSoundLoops[type])return;
+  playCallSound(type);
+  callSoundLoops[type]=window.setTimeout(repeat,cadence);
+ };
+ callSoundLoops[type]=true;repeat();
+}
+function stopRepeatingCallSound(type){
+ if(callSoundLoops[type]&&typeof callSoundLoops[type]==="number")window.clearTimeout(callSoundLoops[type]);
+ delete callSoundLoops[type];stopCallSoundPlayback(type);
+}
+function stopAllCallSounds(){
+ Object.keys(callSoundLoops).forEach(stopRepeatingCallSound);
+ ["incoming","waiting","join","leave"].forEach(stopCallSoundPlayback);
+}
+function syncWaitingCallSound(){
+ const otherIds=Object.keys(s.people||{}).filter(uid=>uid!==(me&&me.uid));
+ if(s.joined&&otherIds.length===0)startRepeatingCallSound("waiting");
+ else stopRepeatingCallSound("waiting");
+}
+function unlockCallSounds(){
+ const ctx=getCallAudioContext();
+ if(ctx&&ctx.state==="suspended")ctx.resume().catch(()=>{});
+}
+document.addEventListener("pointerdown",unlockCallSounds,true);
+document.addEventListener("keydown",unlockCallSounds,true);
+window.PrismVoiceSounds=Object.assign(window.PrismVoiceSounds||{},{
+ saveCustomSound:saveCustomCallSound,
+ customSoundInfo:getCustomCallSoundInfo,
+ clearCustomSound:clearCustomCallSound,
+ preview:(type,prefs)=>playCallSound(type,prefs)
+});
+function resolveIncomingPrompt(answer){
+ if(!incomingPromptResolver)return;
+ const resolve=incomingPromptResolver;incomingPromptResolver=null;
+ if(incomingPromptTimeout)window.clearTimeout(incomingPromptTimeout);
+ incomingPromptTimeout=null;
+ incomingCallPrompt.classList.remove("visible");
+ resolve(!!answer);
+}
+function showIncomingPrompt(callerName){
+ if(incomingPromptResolver)resolveIncomingPrompt(false);
+ $("voice-incoming-name").textContent=callerName;
+ incomingCallPrompt.classList.add("visible");
+ return new Promise(resolve=>{
+  incomingPromptResolver=resolve;
+  incomingPromptTimeout=window.setTimeout(()=>resolveIncomingPrompt(false),45000);
+ });
+}
+$("voice-incoming-answer").addEventListener("click",()=>resolveIncomingPrompt(true));
+$("voice-incoming-decline").addEventListener("click",()=>resolveIncomingPrompt(false));
 const valid = x => /^[A-Za-z0-9_-]{1,128}$/.test(String(x));
 const base = r => "prism/voiceRooms/" + r.sid + "/" + r.cid;
 function msg(t){if(typeof toast==="function")toast(t);else console.log(t);}
