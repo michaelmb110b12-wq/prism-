@@ -1368,6 +1368,71 @@
   #set-css { min-height:180px; font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important; font-size:12px!important; line-height:1.55; tab-size:2; }
   html.mobile-layout #set-css { min-height:150px; font-size:12px!important; }
 </style>
+
+<style id="prism-server-management-css">
+  #server-control-modal { position:fixed; inset:0; z-index:150; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.72); backdrop-filter:blur(3px); }
+  #server-control-modal.hidden { display:none!important; }
+  .server-control-shell { width:min(780px,96vw); max-height:92vh; overflow:auto; padding:22px; background:var(--side); color:var(--text); border:1px solid color-mix(in srgb,var(--text) 11%,transparent); border-radius:12px; box-shadow:0 22px 75px #0009; }
+  .server-control-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:17px; }
+  .server-control-heading h2 { font-size:20px; font-weight:750; }
+  .server-control-heading p { margin-top:5px; color:var(--dim); font-size:12px; line-height:1.45; }
+  #server-control-close { width:32px; height:32px; flex:none; border:0; border-radius:6px; background:var(--input); color:var(--text); font-size:22px; cursor:pointer; }
+  .server-control-tabs { display:flex; gap:5px; overflow:auto; padding-bottom:12px; border-bottom:1px solid color-mix(in srgb,var(--text) 9%,transparent); margin-bottom:15px; }
+  .server-control-tabs button { flex:none; border:0; border-radius:6px; padding:9px 12px; background:transparent; color:var(--dim); font:inherit; font-size:12px; font-weight:650; cursor:pointer; }
+  .server-control-tabs button:hover,.server-control-tabs button.active { background:color-mix(in srgb,var(--accent) 15%,var(--side)); color:var(--text); }
+  .server-control-panel.hidden { display:none!important; }
+  .server-control-help { margin:0 0 13px; color:var(--dim); font-size:11px; line-height:1.55; }
+  .server-control-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .server-control-field { display:flex; flex-direction:column; gap:6px; min-width:0; margin-bottom:13px; }
+  .server-control-field>span { color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:.55px; font-weight:750; }
+  #server-control-modal input[type="text"],#server-control-modal textarea,#server-control-modal select { width:100%; min-width:0; border:1px solid color-mix(in srgb,var(--text) 9%,transparent); border-radius:6px; background:var(--input); color:var(--text); padding:10px 11px; font:inherit; font-size:12px; outline:none; }
+  #server-control-modal textarea { min-height:78px; resize:vertical; line-height:1.5; }
+  #server-control-modal input:focus,#server-control-modal textarea:focus,#server-control-modal select:focus { border-color:var(--accent); outline:1px solid color-mix(in srgb,var(--accent) 35%,transparent); }
+  #server-control-modal input[type="color"] { width:100%; height:38px; padding:3px; border:1px solid color-mix(in srgb,var(--text) 9%,transparent); border-radius:6px; background:var(--input); cursor:pointer; }
+  .server-control-note { display:block; margin-top:3px; color:var(--dim); font-size:10px; line-height:1.45; }
+  .server-control-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; padding-top:14px; border-top:1px solid color-mix(in srgb,var(--text) 8%,transparent); }
+  .server-control-actions button,.server-control-primary { border:0; border-radius:6px; padding:10px 14px; background:var(--input); color:var(--text); font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+  .server-control-actions .server-control-primary,.server-control-primary { background:var(--accent); color:#fff; }
+  .server-control-actions button:disabled,.server-control-primary:disabled { opacity:.55; cursor:wait; }
+  .server-role-create { display:flex; gap:7px; align-items:center; margin-bottom:12px; }
+  .server-role-create input[type="text"] { flex:1; min-width:0; }
+  .server-role-create input[type="color"] { width:40px!important; height:36px!important; padding:2px!important; }
+  .server-role-list,.server-member-list { display:flex; flex-direction:column; gap:9px; }
+  .server-role-card { padding:12px; border:1px solid color-mix(in srgb,var(--text) 9%,transparent); border-radius:8px; background:color-mix(in srgb,var(--text) 2%,var(--side)); }
+  .server-role-top { display:grid; grid-template-columns:minmax(0,1fr) 42px auto; gap:7px; align-items:center; }
+  .server-role-top input[type="text"] { min-width:0; }
+  .server-role-top input[type="color"] { width:42px!important; height:35px!important; padding:2px!important; }
+  .server-role-top button,.server-member-row button { border:1px solid color-mix(in srgb,var(--text) 12%,transparent); border-radius:5px; padding:7px 9px; background:var(--input); color:var(--text); font:inherit; font-size:10px; font-weight:700; cursor:pointer; }
+  .server-role-top button:hover,.server-member-row button:hover { border-color:var(--accent); }
+  .server-role-permissions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px 9px; margin-top:11px; }
+  .server-role-permissions label,.server-bot-command-list label { display:flex; align-items:flex-start; gap:6px; color:var(--dim); font-size:10px; line-height:1.35; cursor:pointer; }
+  .server-role-permissions input,.server-bot-command-list input { margin:1px 0 0; accent-color:var(--accent); flex:none; }
+  .server-member-row { display:flex; align-items:center; gap:10px; padding:9px; border:1px solid color-mix(in srgb,var(--text) 8%,transparent); border-radius:7px; background:color-mix(in srgb,var(--text) 2%,var(--side)); }
+  .server-member-name { flex:1; min-width:0; overflow-wrap:anywhere; font-size:12px; font-weight:650; }
+  .server-member-name small { display:block; margin-top:3px; color:var(--dim); font-size:10px; font-weight:400; }
+  .server-member-row select { width:min(180px,36vw)!important; padding:7px!important; }
+  .server-bot-enable { display:flex; align-items:flex-start; gap:9px; padding:12px; background:var(--input); border-radius:7px; cursor:pointer; }
+  .server-bot-enable input { margin-top:3px; accent-color:var(--accent); }
+  .server-bot-enable b { display:block; font-size:12px; }
+  .server-bot-enable small { display:block; margin-top:4px; color:var(--dim); font-size:10px; line-height:1.45; }
+  .server-bot-command-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; padding:12px; margin:10px 0 14px; border:1px solid color-mix(in srgb,var(--text) 8%,transparent); border-radius:7px; }
+  .server-bot-command-list code { color:var(--text); }
+  .prism-bot-badge { display:inline-block; margin-left:5px; padding:2px 4px; border-radius:3px; background:var(--accent); color:#fff; font-size:8px; font-weight:850; line-height:1.2; vertical-align:middle; }
+  @media(max-width:560px) {
+    .server-control-shell { padding:15px; max-height:94vh; }
+    .server-control-grid { grid-template-columns:minmax(0,1fr); gap:0; }
+    .server-role-permissions,.server-bot-command-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .server-member-row { align-items:flex-start; flex-wrap:wrap; }
+    .server-member-row select { flex:1; width:100%!important; }
+    .server-role-top { grid-template-columns:minmax(0,1fr) 38px; }
+    .server-role-top button { grid-column:1 / -1; }
+  }
+  #rail .srv.active { background:var(--server-accent,var(--accent)); }
+  .chan.active { border-left:2px solid var(--server-accent,var(--accent)); }
+  #chedit { display:inline-grid; place-items:center; width:30px; height:30px; border:0; border-radius:6px; background:var(--input); color:var(--dim); cursor:pointer; }
+  #chedit:hover { background:var(--hover); color:var(--text); }
+  #chedit.hidden { display:none!important; }
+</style>
 </head>
 <body>
 
@@ -1452,7 +1517,7 @@
     <div id="chead"><button id="mobile-back" type="button" title="Back" aria-label="Back to channels">‹</button><span class="hash" id="ch-hash">#</span><span id="chname">general</span><span class="topic" id="chtopic"></span>
       <button id="message-search-toggle" type="button" title="Search messages" aria-label="Search messages"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg></button>
       <input id="message-search-input" class="hidden" type="search" placeholder="Search this conversation…" aria-label="Search messages in this conversation">
-      <button id="pinbtn" class="hidden" title="Pinned messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l-1 6 3 3H6l3-3-1-6Z"/><path d="M12 13v7"/></svg><span id="pincount">0</span></button><button id="chdel" class="hidden" title="Delete channel" aria-label="Delete channel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5"/></svg></button></div>
+      <button id="pinbtn" class="hidden" title="Pinned messages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l-1 6 3 3H6l3-3-1-6Z"/><path d="M12 13v7"/></svg><span id="pincount">0</span></button><button id="chedit" class="hidden" title="Edit channel" aria-label="Edit channel">✎</button><button id="chdel" class="hidden" title="Delete channel" aria-label="Delete channel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5"/></svg></button></div>
     <div id="home-screen" class="hidden" aria-label="Messages home">
       <div class="home-welcome">
         <div class="home-welcome-icon" aria-hidden="true">
@@ -1769,6 +1834,61 @@
   </div>
 </div>
 
+<!-- Server customization, roles, member permissions, and bot manager -->
+<div id="server-control-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="server-control-title">
+  <div class="server-control-shell">
+    <div class="server-control-heading">
+      <div><h2 id="server-control-title">Server settings</h2><p id="server-control-subtitle">Customize your community and manage access.</p></div>
+      <button id="server-control-close" type="button" aria-label="Close server settings">×</button>
+    </div>
+    <nav class="server-control-tabs" aria-label="Server management sections">
+      <button type="button" data-server-control-tab="general">⚙️ General</button>
+      <button type="button" data-server-control-tab="roles">🛡️ Roles &amp; permissions</button>
+      <button type="button" data-server-control-tab="members">👥 Members</button>
+      <button type="button" data-server-control-tab="bots">🤖 Bots</button>
+    </nav>
+    <section class="server-control-panel" data-server-control-panel="general">
+      <p class="server-control-help">Customize the server's identity and community information. Use the server menu's “Change server icon” for image/GIF uploads.</p>
+      <div class="server-control-grid">
+        <label class="server-control-field"><span>Server name</span><input id="server-control-name" type="text" maxlength="32" placeholder="My community"></label>
+        <label class="server-control-field"><span>Icon URL or emoji</span><input id="server-control-icon" type="text" maxlength="2000" placeholder="🎮 or https://example.com/icon.png"><small class="server-control-note">Image/GIF upload is also available in the server menu.</small></label>
+        <label class="server-control-field"><span>Discover category</span><select id="server-control-category"><option>Community</option><option>Gaming</option><option>Technology</option><option>Art &amp; Design</option><option>Music</option><option>Study</option><option>Other</option></select></label>
+        <label class="server-control-field"><span>Server accent color</span><input id="server-control-accent" type="color" value="#5865f2"></label>
+      </div>
+      <label class="server-control-field"><span>Server description</span><textarea id="server-control-description" maxlength="180" placeholder="Tell people what your community is about."></textarea></label>
+      <label class="server-control-field"><span>Welcome message</span><textarea id="server-control-welcome" maxlength="300" placeholder="A welcome note for your members."></textarea></label>
+      <label class="server-control-field"><span>Server rules (used by !rules when the bot is enabled)</span><textarea id="server-control-rules" maxlength="800" placeholder="1. Be respectful&#10;2. Keep things on topic"></textarea></label>
+      <div class="server-control-actions"><button type="button" id="server-control-close-general">Close</button><button type="button" class="server-control-primary" id="server-control-save-general">Save changes</button></div>
+    </section>
+    <section class="server-control-panel hidden" data-server-control-panel="roles">
+      <p class="server-control-help">Create roles and select what each role can do. The server owner and Prism platform admins keep full access. New members receive the default Member permissions unless you assign another role.</p>
+      <div class="server-role-create"><input id="server-new-role-name" type="text" maxlength="32" placeholder="New role name"><input id="server-new-role-color" type="color" value="#7c83ff" aria-label="New role color"><button type="button" id="server-create-role" class="server-control-primary">Create role</button></div>
+      <div id="server-roles-list" class="server-role-list"><div class="admin-loading">Loading roles…</div></div>
+    </section>
+    <section class="server-control-panel hidden" data-server-control-panel="members">
+      <p class="server-control-help">Assign a role to each member. Saving Member removes any custom role assignment and uses the default Member permissions.</p>
+      <input id="server-members-search" class="admin-search" type="search" placeholder="Search server members" autocomplete="off" aria-label="Search server members">
+      <div id="server-members-list" class="server-member-list"><div class="admin-loading">Loading members…</div></div>
+    </section>
+    <section class="server-control-panel hidden" data-server-control-panel="bots">
+      <p class="server-control-help">Manage PrismBot, a built-in command bot for this server. Commands respond in text channels using the prefix you choose. These are in-app bot commands, not external Discord bot tokens or hosting.</p>
+      <label class="server-bot-enable"><input id="server-bot-enabled" type="checkbox"><span><b>Enable PrismBot</b><small>Allow members with “Use bot commands” permission to run the enabled commands below.</small></span></label>
+      <label class="server-control-field" style="margin-top:13px"><span>Command prefix (one character)</span><input id="server-bot-prefix" type="text" maxlength="1" value="!" placeholder="!"></label>
+      <div style="font-size:12px;font-weight:750;margin:15px 0 8px">Built-in commands</div>
+      <div class="server-bot-command-list">
+        <label><input type="checkbox" data-server-bot-command="help"><span><code>help</code> — command list</span></label>
+        <label><input type="checkbox" data-server-bot-command="ping"><span><code>ping</code> — check bot</span></label>
+        <label><input type="checkbox" data-server-bot-command="server"><span><code>server</code> — server details</span></label>
+        <label><input type="checkbox" data-server-bot-command="members"><span><code>members</code> — member count</span></label>
+        <label><input type="checkbox" data-server-bot-command="time"><span><code>time</code> — current time</span></label>
+        <label><input type="checkbox" data-server-bot-command="rules"><span><code>rules</code> — show server rules</span></label>
+      </div>
+      <label class="server-control-field"><span>Custom commands</span><textarea id="server-bot-custom-commands" maxlength="6000" placeholder="hello=Welcome to the server!&#10;socials=Find our links in #announcements"></textarea><small class="server-control-note">One command per line using command=response. Names use letters, numbers, underscores or hyphens. You can use $user, $server and $args in responses.</small></label>
+      <div class="server-control-actions"><button type="button" id="server-control-close-bots">Close</button><button type="button" class="server-control-primary" id="server-bot-save">Save bot settings</button></div>
+    </section>
+  </div>
+</div>
+
 <!-- pins -->
 <div id="pins" class="hidden">
   <div class="box">
@@ -1852,6 +1972,16 @@ function toast(msg){
 /* ---------------- state ---------------- */
 let me = null;                 // {uid, name}
 let servers = {};             // sid -> {name, owner}
+let serverRoleCache = Object.create(null);
+let serverMemberRoleCache = Object.create(null);
+let serverRoleRef = null;
+let serverMemberRoleRef = null;
+let serverControlSid = null;
+let serverControlRoles = {};
+let serverControlMemberRoles = {};
+let serverControlMembers = [];
+let serverControlTab = "general";
+let serverControlOriginalIcon = "";
 let myServers = {};           // sid -> true (servers I've joined)
 let discoveryListings = {};   // public catalog, independent from private server access
 let discoveryLoadError = false;
@@ -2152,6 +2282,312 @@ async function seedOfficial(){
     {uid: "system", u: "Prism", t: "Welcome to Prism! Create an account, make servers, DM your friends — it's all free.", ts: TS});
 }
 
+/* ---------------- server roles, permissions, and bot helpers ---------------- */
+const SERVER_PERMISSION_DEFS = [
+  {key:"viewChannels",label:"View channels"},
+  {key:"sendMessages",label:"Send messages"},
+  {key:"createPosts",label:"Create forum posts"},
+  {key:"manageChannels",label:"Manage channels"},
+  {key:"manageMessages",label:"Manage/delete messages"},
+  {key:"manageRoles",label:"Manage roles and members"},
+  {key:"manageServer",label:"Customize server"},
+  {key:"manageBots",label:"Manage bots"},
+  {key:"mentionEveryone",label:"Mention @everyone"},
+  {key:"useBotCommands",label:"Use bot commands"}
+];
+const SERVER_MEMBER_DEFAULTS = ["viewChannels","sendMessages","createPosts","useBotCommands"];
+const SERVER_BUILTIN_ROLES = new Set(["admin","moderator","member"]);
+function defaultServerRoles(){
+  const permissions=keys=>Object.fromEntries(SERVER_PERMISSION_DEFS.map(p=>[p.key,keys.includes(p.key)]));
+  return {
+    admin:{name:"Admin",color:"#ed4245",builtIn:true,position:300,permissions:permissions(SERVER_PERMISSION_DEFS.map(p=>p.key))},
+    moderator:{name:"Moderator",color:"#3ba55d",builtIn:true,position:200,permissions:permissions(["viewChannels","sendMessages","createPosts","manageMessages","mentionEveryone","useBotCommands"])},
+    member:{name:"Member",color:"#8e9297",builtIn:true,position:100,permissions:permissions(SERVER_MEMBER_DEFAULTS)}
+  };
+}
+function defaultServerBotConfig(){
+  return {enabled:false,prefix:"!",commands:{help:true,ping:true,server:true,members:true,time:true,rules:true},customCommands:{}};
+}
+function serverControlAllowed(sid,tab){
+  return tab==="general"?canServerPermission(sid,"manageServer"):
+    (tab==="roles"||tab==="members")?canServerPermission(sid,"manageRoles"):
+    tab==="bots"?canServerPermission(sid,"manageBots"):false;
+}
+function canServerPermission(sid,permission){
+  if(!me||!sid||!servers[sid])return false;
+  if(isAdmin()||servers[sid].owner===me.uid)return true;
+  const roleId=(serverMemberRoleCache[sid]||{})[me.uid]||"member";
+  const role=(serverRoleCache[sid]||{})[roleId];
+  if(!role)return SERVER_MEMBER_DEFAULTS.includes(permission);
+  const permissions=role.permissions||{};
+  return Array.isArray(permissions)?permissions.includes(permission):permissions[permission]===true;
+}
+function ensureServerPermissionListeners(sid){
+  if(serverRoleRef)serverRoleRef.off();
+  if(serverMemberRoleRef)serverMemberRoleRef.off();
+  serverRoleRef=db.ref("prism/serverRoles/"+sid);
+  serverMemberRoleRef=db.ref("prism/serverMemberRoles/"+sid);
+  serverRoleRef.on("value",snap=>{serverRoleCache[sid]=snap.val()||{};refreshServerPermissionButtons(sid);},error=>console.warn("Prism role permissions could not be read:",error));
+  serverMemberRoleRef.on("value",snap=>{serverMemberRoleCache[sid]=snap.val()||{};refreshServerPermissionButtons(sid);},error=>console.warn("Prism member role assignments could not be read:",error));
+}
+function refreshServerPermissionButtons(sid){
+  if(view.type==="server"&&view.sid===sid){
+    $("chdel").classList.toggle("hidden",!view.cid||!canServerPermission(sid,"manageChannels"));
+    $("chedit").classList.toggle("hidden",!view.cid||!canServerPermission(sid,"manageChannels"));
+  }
+}
+function safeServerAccent(value){
+  return typeof value==="string"&&/^#[0-9a-f]{6}$/i.test(value)?value:"#5865f2";
+}
+function safeServerIconInput(value){
+  const v=String(value||"").trim();
+  if(!v)return "";
+  if(/^https:\/\/[^\s"'<>]+$/i.test(v)&&v.length<=2000)return v;
+  if(v.length<=2100000&&/^data:image\/(?:gif|jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(v))return v;
+  if(/^https?:\/\//i.test(v)||/^data:image\//i.test(v))return null;
+  return Array.from(v).slice(0,4).join("");
+}
+function bindServerControlUI(){
+  document.querySelectorAll("[data-server-control-tab]").forEach(button=>button.addEventListener("click",()=>switchServerControlTab(button.dataset.serverControlTab)));
+  $("server-control-close").onclick=closeServerControl;
+  $("server-control-close-general").onclick=closeServerControl;
+  $("server-control-close-bots").onclick=closeServerControl;
+  $("server-control-modal").addEventListener("click",event=>{if(event.target===$("server-control-modal"))closeServerControl();});
+  $("server-control-save-general").onclick=saveServerGeneralSettings;
+  $("server-create-role").onclick=createServerRole;
+  $("server-bot-save").onclick=saveServerBotSettings;
+  $("server-members-search").addEventListener("input",renderServerMembers);
+}
+function openServerControl(sid,requestedTab){
+  if(!me||!servers[sid])return;
+  const firstAvailable=["general","roles","members","bots"].find(tab=>serverControlAllowed(sid,tab));
+  if(!firstAvailable){toast("You don't have permission to manage this server.");return;}
+  serverControlSid=sid;
+  serverControlTab=serverControlAllowed(sid,requestedTab)?requestedTab:firstAvailable;
+  const server=servers[sid];
+  $("server-control-title").textContent=(server.name||"Server")+" settings";
+  $("server-control-subtitle").textContent="Customize "+(server.name||"your server")+", manage member roles and configure PrismBot.";
+  $("server-control-name").value=String(server.name||"").slice(0,32);
+  serverControlOriginalIcon=String(server.icon||"");
+  $("server-control-icon").value=serverControlOriginalIcon.startsWith("data:image/")?"":serverControlOriginalIcon;
+  $("server-control-category").value=["Community","Gaming","Technology","Art & Design","Music","Study","Other"].includes(server.category)?server.category:"Community";
+  $("server-control-accent").value=safeServerAccent(server.accentColor);
+  $("server-control-description").value=String(server.description||"").slice(0,180);
+  $("server-control-welcome").value=String(server.welcomeMessage||"").slice(0,300);
+  $("server-control-rules").value=String(server.rules||"").slice(0,800);
+  $("server-control-modal").classList.remove("hidden");
+  document.documentElement.style.setProperty("--server-accent",safeServerAccent(server.accentColor));
+  document.querySelectorAll("[data-server-control-tab]").forEach(button=>button.classList.toggle("hidden",!serverControlAllowed(sid,button.dataset.serverControlTab)));
+  switchServerControlTab(serverControlTab);
+  renderServerBotSettings(sid);
+  loadServerControlData(sid).catch(error=>{console.warn("Couldn't load server management data:",error);toast("Some server management data couldn't load. Check Firebase Database Rules.");});
+}
+async function loadServerControlData(sid){
+  if(!serverControlAllowed(sid,"roles")){
+    serverControlRoles={};serverControlMemberRoles={};serverControlMembers=[];return;
+  }
+  const rolesRef=db.ref("prism/serverRoles/"+sid);
+  try{
+    let rolesSnap=await rolesRef.once("value");
+    if(!rolesSnap.exists()){await rolesRef.set(defaultServerRoles());rolesSnap=await rolesRef.once("value");}
+    if(serverControlSid!==sid)return;
+    serverControlRoles=rolesSnap.val()||{};serverRoleCache[sid]=serverControlRoles;
+    const memberRolesSnap=await db.ref("prism/serverMemberRoles/"+sid).once("value");
+    if(serverControlSid!==sid)return;
+    serverControlMemberRoles=memberRolesSnap.val()||{};serverMemberRoleCache[sid]=serverControlMemberRoles;
+    renderServerRoles();renderServerMembers();refreshServerPermissionButtons(sid);
+  }catch(error){
+    $("server-roles-list").innerHTML='<div class="admin-loading">Could not load roles. Check Firebase rules for prism/serverRoles and prism/serverMemberRoles.</div>';
+    $("server-members-list").innerHTML='<div class="admin-loading">Could not load members. Check Firebase rules for prism/myServers and prism/users.</div>';
+    throw error;
+  }
+  try{
+    const [membershipSnap,usersSnap]=await Promise.all([db.ref("prism/myServers").once("value"),db.ref("prism/users").once("value")]);
+    if(serverControlSid!==sid)return;
+    const membership=membershipSnap.val()||{},users=usersSnap.val()||{};
+    const ids=new Set(Object.keys(membership).filter(uid=>membership[uid]&&membership[uid][sid]));
+    if(servers[sid]&&servers[sid].owner)ids.add(servers[sid].owner);
+    serverControlMembers=[...ids].map(uid=>({uid,name:(users[uid]&&users[uid].name)||(presenceCache[uid]&&presenceCache[uid].name)||(uid===me.uid?me.name:"Prism member"),isOwner:!!(servers[sid]&&servers[sid].owner===uid)}))
+      .sort((a,b)=>a.isOwner?-1:b.isOwner?1:a.name.localeCompare(b.name));
+    renderServerMembers();
+  }catch(error){$("server-members-list").innerHTML='<div class="admin-loading">Could not read the member directory. Firebase rules may need to allow access to member usernames.</div>';}
+  renderServerBotSettings(sid);
+}
+function switchServerControlTab(tab){
+  const sid=serverControlSid;if(!sid||!serverControlAllowed(sid,tab))return;
+  serverControlTab=tab;
+  document.querySelectorAll("[data-server-control-tab]").forEach(button=>button.classList.toggle("active",button.dataset.serverControlTab===tab));
+  document.querySelectorAll("[data-server-control-panel]").forEach(panel=>panel.classList.toggle("hidden",panel.dataset.serverControlPanel!==tab));
+  if(tab==="roles")renderServerRoles();
+  if(tab==="members")renderServerMembers();
+  if(tab==="bots")renderServerBotSettings(sid);
+}
+function closeServerControl(){$("server-control-modal").classList.add("hidden");serverControlSid=null;}
+async function saveServerGeneralSettings(){
+  const sid=serverControlSid,server=sid&&servers[sid];if(!server||!canServerPermission(sid,"manageServer"))return;
+  const name=$("server-control-name").value.trim();if(!name){toast("Server name can't be empty.");return;}
+  const typedIcon=$("server-control-icon").value.trim();
+  let icon=serverControlOriginalIcon;
+  if(typedIcon){icon=safeServerIconInput(typedIcon);if(icon===null){toast("Use an HTTPS image URL, a valid image/GIF data URL, or an emoji.");return;}}
+  else if(!serverControlOriginalIcon.startsWith("data:image/"))icon="";
+  const changes={
+    name:name.slice(0,32),icon,
+    description:$("server-control-description").value.trim().slice(0,180),
+    category:$("server-control-category").value||"Community",
+    accentColor:safeServerAccent($("server-control-accent").value),
+    welcomeMessage:$("server-control-welcome").value.trim().slice(0,300),
+    rules:$("server-control-rules").value.trim().slice(0,800)
+  };
+  const updates={};Object.entries(changes).forEach(([key,value])=>updates["prism/servers/"+sid+"/"+key]=value||null);
+  const hasCatalog=!!(discoveryListings&&discoveryListings[sid]);
+  if(server.discoverable===true||hasCatalog)["name","icon","description","category"].forEach(key=>updates["prism/discoverableServers/"+sid+"/"+key]=changes[key]||null);
+  const button=$("server-control-save-general");button.disabled=true;button.textContent="Saving…";
+  try{
+    await db.ref().update(updates);
+    Object.assign(server,changes);
+    if(discoveryListings&&discoveryListings[sid])Object.assign(discoveryListings[sid],{name:changes.name,icon:changes.icon,description:changes.description,category:changes.category});
+    $("srv-title").textContent="◈ "+server.name+(sid==="official"||server.officialMark===true?" ★ Official":server.verified===true?" ✓ Verified":"");
+    document.documentElement.style.setProperty("--server-accent",changes.accentColor);
+    renderRail();renderDiscoverServers();closeServerControl();toast("Server customization saved.");
+  }catch(error){console.warn("Server customization save failed:",error);toast("Couldn't save server customization. Check Firebase Database Rules.");}
+  finally{button.disabled=false;button.textContent="Save changes";}
+}
+function renderServerRoles(){
+  const box=$("server-roles-list");if(!box)return;box.replaceChildren();
+  const entries=Object.entries(serverControlRoles||{}).sort((a,b)=>(Number((b[1]||{}).position)||0)-(Number((a[1]||{}).position)||0));
+  if(!entries.length){box.innerHTML='<div class="admin-loading">No roles yet. Create the first role.</div>';return;}
+  entries.forEach(([roleId,roleValue])=>{
+    const role=roleValue||{},card=document.createElement("div");card.className="server-role-card";card.dataset.roleId=roleId;
+    const top=document.createElement("div");top.className="server-role-top";
+    const name=document.createElement("input");name.type="text";name.maxLength=32;name.value=String(role.name||"Role");name.setAttribute("aria-label","Role name");
+    const color=document.createElement("input");color.type="color";color.value=safeServerAccent(role.color);color.setAttribute("aria-label","Role color");
+    const save=document.createElement("button");save.type="button";save.textContent="Save role";save.onclick=()=>saveServerRole(roleId,card);
+    top.append(name,color,save);card.appendChild(top);
+    const permissions=document.createElement("div");permissions.className="server-role-permissions";
+    SERVER_PERMISSION_DEFS.forEach(def=>{
+      const label=document.createElement("label"),check=document.createElement("input");check.type="checkbox";check.dataset.permission=def.key;check.checked=!!(role.permissions&&role.permissions[def.key]===true);
+      const text=document.createElement("span");text.textContent=def.label;label.append(check,text);permissions.appendChild(label);
+    });
+    card.appendChild(permissions);
+    if(!role.builtIn&&!SERVER_BUILTIN_ROLES.has(roleId)){
+      const actions=document.createElement("div");actions.className="server-control-actions";actions.style.marginTop="9px";actions.style.paddingTop="9px";
+      const remove=document.createElement("button");remove.type="button";remove.textContent="Delete role";remove.onclick=()=>deleteServerRole(roleId,role.name||"this role");actions.appendChild(remove);card.appendChild(actions);
+    }
+    box.appendChild(card);
+  });
+}
+async function createServerRole(){
+  const sid=serverControlSid;if(!sid||!canServerPermission(sid,"manageRoles"))return;
+  const name=$("server-new-role-name").value.trim().slice(0,32);if(!name){toast("Enter a name for the role.");return;}
+  const ref=db.ref("prism/serverRoles/"+sid).push();
+  const role={name,color:safeServerAccent($("server-new-role-color").value),builtIn:false,position:Date.now(),permissions:Object.fromEntries(SERVER_PERMISSION_DEFS.map(p=>[p.key,false]))};
+  try{await ref.set(role);serverControlRoles[ref.key]=role;serverRoleCache[sid]=serverControlRoles;$("server-new-role-name").value="";renderServerRoles();toast("Role created.");}
+  catch(error){toast("Couldn't create the role. Check Firebase rules for prism/serverRoles.");}
+}
+async function saveServerRole(roleId,card){
+  const sid=serverControlSid;if(!sid||!card||!canServerPermission(sid,"manageRoles"))return;
+  const name=card.querySelector('input[type="text"]').value.trim().slice(0,32);if(!name){toast("Role name can't be empty.");return;}
+  const color=card.querySelector('input[type="color"]').value,permissions={};
+  card.querySelectorAll("[data-permission]").forEach(input=>permissions[input.dataset.permission]=input.checked);
+  const role=Object.assign({},serverControlRoles[roleId]||{},{name,color,permissions});
+  try{await db.ref("prism/serverRoles/"+sid+"/"+roleId).set(role);serverControlRoles[roleId]=role;serverRoleCache[sid]=serverControlRoles;toast("Role permissions saved.");}
+  catch(error){toast("Couldn't save the role. Check Firebase rules for prism/serverRoles.");}
+}
+async function deleteServerRole(roleId,name){
+  const sid=serverControlSid;
+  if(!sid||!canServerPermission(sid,"manageRoles")||SERVER_BUILTIN_ROLES.has(roleId))return;
+  if(!window.confirm("Delete the "+name+" role and return its members to the default Member role?"))return;
+  try{
+    const changes={};changes["prism/serverRoles/"+sid+"/"+roleId]=null;
+    Object.entries(serverControlMemberRoles||{}).forEach(([uid,assigned])=>{if(assigned===roleId)changes["prism/serverMemberRoles/"+sid+"/"+uid]=null;});
+    await db.ref().update(changes);delete serverControlRoles[roleId];
+    Object.keys(serverControlMemberRoles).forEach(uid=>{if(serverControlMemberRoles[uid]===roleId)delete serverControlMemberRoles[uid];});
+    serverRoleCache[sid]=serverControlRoles;serverMemberRoleCache[sid]=serverControlMemberRoles;
+    renderServerRoles();renderServerMembers();toast("Role deleted.");
+  }catch(error){toast("Couldn't delete the role. Check Firebase rules.");}
+}
+function renderServerMembers(){
+  const box=$("server-members-list");if(!box)return;box.replaceChildren();
+  const sid=serverControlSid;if(!sid)return;
+  const query=$("server-members-search").value.trim().toLowerCase();
+  const records=(serverControlMembers||[]).filter(member=>!query||member.name.toLowerCase().includes(query));
+  if(!records.length){box.innerHTML='<div class="admin-loading">No matching members found.</div>';return;}
+  records.forEach(member=>{
+    const row=document.createElement("div");row.className="server-member-row";
+    const label=document.createElement("div");label.className="server-member-name";label.textContent=member.name;
+    const detail=document.createElement("small");detail.textContent=member.isOwner?"Server owner":"Member";label.appendChild(detail);row.appendChild(label);
+    if(member.isOwner){const ownerTag=document.createElement("span");ownerTag.className="admin-protected-tag";ownerTag.textContent="OWNER";row.appendChild(ownerTag);}
+    else{
+      const select=document.createElement("select");select.setAttribute("aria-label","Role for "+member.name);
+      const roleIds=Object.entries(serverControlRoles||{}).filter(([id,role])=>id!=="owner"&&role);
+      if(!roleIds.some(([id])=>id==="member"))roleIds.push(["member",{name:"Member"}]);
+      roleIds.sort((a,b)=>(Number((b[1]||{}).position)||0)-(Number((a[1]||{}).position)||0));
+      roleIds.forEach(([id,role])=>{const opt=document.createElement("option");opt.value=id;opt.textContent=role.name||id;select.appendChild(opt);});
+      select.value=serverControlMemberRoles[member.uid]||"member";if(![...select.options].some(o=>o.value===select.value))select.value="member";
+      const save=document.createElement("button");save.type="button";save.textContent="Save role";
+      save.onclick=async()=>{
+        const roleId=select.value;
+        try{await db.ref("prism/serverMemberRoles/"+sid+"/"+member.uid).set(roleId==="member"?null:roleId);
+          if(roleId==="member")delete serverControlMemberRoles[member.uid];else serverControlMemberRoles[member.uid]=roleId;
+          serverMemberRoleCache[sid]=serverControlMemberRoles;toast("Role assigned to "+member.name+".");
+        }catch(error){toast("Couldn't assign that role. Check Firebase rules for prism/serverMemberRoles.");}
+      };
+      row.append(select,save);
+    }
+    box.appendChild(row);
+  });
+}
+function renderServerBotSettings(sid){
+  if(!sid||serverControlSid!==sid)return;
+  const server=servers[sid]||{},defaults=defaultServerBotConfig(),config=Object.assign({},defaults,server.botConfig||{});
+  config.commands=Object.assign({},defaults.commands,config.commands||{});config.customCommands=config.customCommands||{};
+  $("server-bot-enabled").checked=config.enabled===true;$("server-bot-prefix").value=String(config.prefix||"!").slice(0,1);
+  document.querySelectorAll("[data-server-bot-command]").forEach(input=>input.checked=config.commands[input.dataset.serverBotCommand]!==false);
+  $("server-bot-custom-commands").value=Object.entries(config.customCommands).map(([command,response])=>command+"="+response).join("\n");
+}
+async function saveServerBotSettings(){
+  const sid=serverControlSid,server=sid&&servers[sid];if(!server||!canServerPermission(sid,"manageBots"))return;
+  const prefix=$("server-bot-prefix").value;if(!/^[!/?._$+-]$/.test(prefix)){toast("Choose one prefix character, such as ! or /.");return;}
+  const commands={};document.querySelectorAll("[data-server-bot-command]").forEach(input=>commands[input.dataset.serverBotCommand]=input.checked);
+  const customCommands={};
+  for(const raw of $("server-bot-custom-commands").value.split(/\r?\n/)){
+    const line=raw.trim();if(!line)continue;const equals=line.indexOf("=");
+    if(equals<1){toast("Each custom command must use command=response.");return;}
+    const command=line.slice(0,equals).trim().toLowerCase(),response=line.slice(equals+1).trim().slice(0,500);
+    if(!/^[a-z0-9_-]{1,24}$/.test(command)||!response){toast("Custom command names need 1–24 letters, numbers, _ or -, with a response.");return;}
+    customCommands[command]=response;
+  }
+  const config={enabled:$("server-bot-enabled").checked,prefix,commands,customCommands};
+  const button=$("server-bot-save");button.disabled=true;button.textContent="Saving…";
+  try{await db.ref("prism/servers/"+sid+"/botConfig").set(config);server.botConfig=config;toast(config.enabled?"PrismBot settings saved.":"PrismBot is disabled.");}
+  catch(error){toast("Couldn't save bot settings. Check Firebase rules for prism/servers.");}
+  finally{button.disabled=false;button.textContent="Save bot settings";}
+}
+async function runServerBotCommand(sid,cid,raw){
+  const server=servers[sid],config=server&&server.botConfig;
+  if(!server||!config||config.enabled!==true||!canServerPermission(sid,"useBotCommands"))return;
+  const prefix=String(config.prefix||"!").slice(0,1);if(!prefix||!raw.startsWith(prefix))return;
+  const parts=raw.slice(prefix.length).trim().split(/\s+/),command=String(parts.shift()||"").toLowerCase(),args=parts.join(" ");
+  if(!command)return;
+  const customCommands=config.customCommands||{},commands=config.commands||{},enabled=key=>commands[key]!==false;
+  let response="";
+  if(Object.prototype.hasOwnProperty.call(customCommands,command)){
+    response=String(customCommands[command]||"").replace(/\$user\b/g,()=>me.name).replace(/\$server\b/g,()=>String(server.name||"this server")).replace(/\$args\b/g,()=>args);
+  }else if(command==="help"&&enabled("help")){
+    const available=["help","ping","server","members","time","rules"].filter(key=>enabled(key)).concat(Object.keys(customCommands)).map(key=>prefix+key);
+    response=available.length?"Available commands: "+available.join(", "):"No commands are enabled.";
+  }else if(command==="ping"&&enabled("ping"))response="Pong! 🏓";
+  else if(command==="server"&&enabled("server"))response=(server.name||"This server")+(server.description?" — "+server.description:"");
+  else if(command==="members"&&enabled("members")){
+    try{const snap=await db.ref("prism/myServers").once("value"),all=snap.val()||{},count=Object.values(all).filter(members=>members&&members[sid]).length;response="This server has "+count+" member"+(count===1?"":"s")+".";}
+    catch(e){response="I couldn't read the member count right now.";}
+  }else if(command==="time"&&enabled("time"))response="Current time: "+new Date().toLocaleString();
+  else if(command==="rules"&&enabled("rules"))response=String(server.rules||"No server rules have been configured yet.");
+  if(!response)return;
+  try{await db.ref("prism/messages/"+sid+"/"+cid).push({uid:"prismbot_"+sid,u:String(config.name||"PrismBot").slice(0,32),t:response.slice(0,1800),ts:TS,bot:true});}
+  catch(error){console.warn("PrismBot couldn't reply:",error);}
+}
+bindServerControlUI();
 /* ---------------- servers ---------------- */
 function renderRail(){
   const rail = $("rail-servers"); rail.innerHTML = "";
@@ -2192,6 +2628,8 @@ function updateHomeLayout(){
     $("chtopic").textContent = "";
     $("pinbtn").classList.add("hidden");
     $("chdel").classList.add("hidden");
+    $("chedit").classList.add("hidden");
+    document.documentElement.style.removeProperty("--server-accent");
   }
 }
 function applySidebarSearch(){
@@ -2433,6 +2871,7 @@ async function startDMWithUser(uid,name){
 function openHome(){
   homeView = true;
   discoverView = false;
+  document.documentElement.style.removeProperty("--server-accent");
   setMobilePane("home");
   unlisten();
   updateHomeLayout();
@@ -2658,6 +3097,7 @@ function discoveryRecordMap(){
 function openDiscover(){
   homeView = false;
   discoverView = true;
+  document.documentElement.style.removeProperty("--server-accent");
   setMobilePane("discover");
   unlisten();
   updateHomeLayout();
@@ -2890,13 +3330,19 @@ function copyText(t){
 }
 function openServer(sid){
   if(!servers[sid]) return;
-  homeView = false;
-  discoverView = false;
-  updateHomeLayout();
   if(sid !== "official" && !(myServers && myServers[sid])){
     toast("You need an invite link to join that server.");
     return;
   }
+  if(!canServerPermission(sid,"viewChannels")){
+    toast("You don't have permission to view this server's channels.");
+    return;
+  }
+  homeView = false;
+  discoverView = false;
+  updateHomeLayout();
+  ensureServerPermissionListeners(sid);
+  document.documentElement.style.setProperty("--server-accent",safeServerAccent(servers[sid].accentColor));
   setMobilePane("channels");
   if(chanListRef){ chanListRef.off(); chanListRef = null; }
   unlisten();
@@ -2925,6 +3371,7 @@ function openServer(sid){
   });
 }
 function openChannel(sid, cid, cname, topic, ctype, autoSelect = false){
+  if(!canServerPermission(sid,"viewChannels")){toast("You don't have permission to view this channel.");return;}
   homeView = false;
   discoverView = false;
   updateHomeLayout();
@@ -2935,8 +3382,9 @@ function openChannel(sid, cid, cname, topic, ctype, autoSelect = false){
   document.querySelectorAll("#srv-channels .chan").forEach(el => el.classList.remove("active"));
   $("ch-hash").textContent = (ctype === "forum") ? "📝" : "#";
   $("chname").textContent = cname;
-  $("chtopic").textContent = topic;
-  $("chdel").classList.toggle("hidden", !isAdmin());
+  $("chtopic").textContent = topic || ((cid==="general"&&servers[sid]&&servers[sid].welcomeMessage)||"");
+  $("chdel").classList.toggle("hidden", !canServerPermission(sid,"manageChannels"));
+  $("chedit").classList.toggle("hidden", !canServerPermission(sid,"manageChannels"));
   if((ctype || "chat") === "forum"){
     renderForum();
   }else{
@@ -2950,7 +3398,7 @@ function openChannel(sid, cid, cname, topic, ctype, autoSelect = false){
 $("ch-add").onclick = () => {
   const sid = view.type === "server" ? view.sid : $("srv-title").dataset.sid;
   if(!sid || !servers[sid]) return;
-  if(servers[sid].owner !== me.uid){ toast("Only the server owner can create channels."); return; }
+  if(!canServerPermission(sid,"manageChannels")){ toast("You don't have permission to manage channels."); return; }
   openModal("Create channel", "What should the channel be called?", "announcements", "Next", name => {
     if(!name.trim()) return;
     pickChannelType(sid, name.trim().slice(0, 24).toLowerCase().replace(/\s+/g, "-"));
@@ -2987,6 +3435,7 @@ function restoreModalButtons(){
   closeModal();
 }
 async function createChannel(sid, cname, type){
+  if(!canServerPermission(sid,"manageChannels")){toast("You don't have permission to create channels.");return;}
   try{
     const ref = db.ref("prism/serverChannels/" + sid).push();
     await ref.set({name: cname, type: type, createdAt: TS});
@@ -2995,13 +3444,14 @@ async function createChannel(sid, cname, type){
   }catch(e){ toast("Couldn't create the channel."); }
 }
 $("chdel").onclick = () => {
-  if(view.type !== "server" || !view.cid || !isAdmin()) return;
+  if(view.type !== "server" || !view.cid || !canServerPermission(view.sid,"manageChannels")) return;
   const sid = view.sid, cid = view.cid, ctype = view.ctype, cname = view.cname;
   openModal("Delete channel", "Really delete #" + cname + "? This removes the channel and everything in it. This can't be undone.",
     "", "Delete", () => deleteChannel(sid, cid, ctype));
   $("m-input").style.display = "none";
 };
 async function deleteChannel(sid, cid, ctype){
+  if(!canServerPermission(sid,"manageChannels")){toast("You don't have permission to delete channels.");return;}
   try{
     await db.ref("prism/serverChannels/" + sid + "/" + cid).remove();
     if(ctype === "forum"){
@@ -3018,6 +3468,22 @@ async function deleteChannel(sid, cid, ctype){
   }catch(e){ toast("Couldn't delete the channel."); }
 }
 
+$("chedit").onclick=()=>{
+  if(view.type!=="server"||!view.cid||!canServerPermission(view.sid,"manageChannels"))return;
+  const sid=view.sid,cid=view.cid,ctype=view.ctype;
+  openModal("Edit channel","Update the channel name (up to 24 characters).",view.cname||"general","Next",name=>{
+    const newName=String(name||"").trim().toLowerCase().slice(0,24).replace(/[^a-z0-9_-]/g,"-").replace(/-+/g,"-");
+    if(!newName){toast("Enter a valid channel name.");return;}
+    openModal("Edit channel topic","Set a short channel topic (up to 40 characters).",String(view.topic||""),"Save",async topic=>{
+      try{
+        const cleanTopic=String(topic||"").trim().slice(0,40);
+        await db.ref("prism/serverChannels/"+sid+"/"+cid).update({name:newName,topic:cleanTopic});
+        openServer(sid);openChannel(sid,cid,newName,cleanTopic,ctype,true);
+        toast("Channel updated.");
+      }catch(error){toast("Couldn't update the channel. Check Firebase rules.");}
+    });
+  });
+};
 /* ---------------- forum channels ---------------- */
 const ftime = ts => new Date(ts || Date.now())
   .toLocaleString(undefined, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
@@ -3059,6 +3525,7 @@ function renderForum(){
 }
 function newForumPost(){
   const sid = view.sid, cid = view.cid;
+  if(!canServerPermission(sid,"createPosts")){toast("You don't have permission to create forum posts.");return;}
   openModal("New post", "Give your post a title.", "My awesome post", "Next", title => {
     if(!title.trim()) return;
     openModal("New post", "What's it about?", "Write something...", "Post", body => {
@@ -3378,6 +3845,31 @@ function toggleSrvMenu(e){
       m.appendChild(ds);
     }
   }
+  if(canServerPermission(sid,"manageServer")){
+    const customize=document.createElement("button");
+    customize.textContent="⚙️ Customize server";
+    customize.onclick=()=>{closeSrvMenu();openServerControl(sid,"general");};
+    m.appendChild(customize);
+    if(servers[sid].owner!==me.uid){
+      const changeIcon=document.createElement("button");
+      changeIcon.textContent="🖼️ Change server icon";
+      changeIcon.onclick=()=>{closeSrvMenu();changeServerIcon(sid);};
+      m.appendChild(changeIcon);
+    }
+  }
+  if(canServerPermission(sid,"manageRoles")){
+    const roles=document.createElement("button");
+    roles.textContent="🛡️ Roles & permissions";
+    roles.onclick=()=>{closeSrvMenu();openServerControl(sid,"roles");};
+    m.appendChild(roles);
+  }
+  if(canServerPermission(sid,"manageBots")){
+    const bots=document.createElement("button");
+    bots.textContent="🤖 Bot settings";
+    bots.onclick=()=>{closeSrvMenu();openServerControl(sid,"bots");};
+    m.appendChild(bots);
+  }
+
   if(isAjgplayz() && sid !== "official"){
     const verify = document.createElement("button");
     verify.textContent = servers[sid].verified === true ? "☑ Remove verification" : "☑ Verify server";
@@ -3412,7 +3904,7 @@ function leaveServer(sid){
   toast("You left the server.");
 }
 function changeServerIcon(sid){
-  if(!me || !servers[sid] || (servers[sid].owner !== me.uid && !isAdmin())) return;
+  if(!me || !servers[sid] || !canServerPermission(sid,"manageServer")) return;
   let draftIcon = "";
   const safeIcon = value => typeof value === "string" && value.length <= 2100000 &&
     (/^https:\/\/[^\s"'<>]+$/i.test(value) || /^data:image\/(?:gif|jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(value));
@@ -3795,6 +4287,8 @@ function renderMessages(path, typeScope){
 function buildMsgEl(key, m, typeScope, path){
   const d = new Date(m.ts || Date.now());
   const mine = m.uid === me.uid;
+  const serverPathMatch=String(path||"").match(/^prism\/(?:messages|forumReplies)\/([^/]+)/);
+  const canManageMessage=serverPathMatch?canServerPermission(serverPathMatch[1],"manageMessages"):isAdmin();
   const el = document.createElement("div");
   el.className = "msg";
   el.dataset.key = key;
@@ -3816,8 +4310,8 @@ function buildMsgEl(key, m, typeScope, path){
     '<button data-act="react" title="Add reaction" aria-label="Add reaction">😊</button>' +
     '<button data-act="reply" title="Reply" aria-label="Reply"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 15 4 10l5-5M4 10h9a7 7 0 0 1 7 7v2"/></svg></button>' +
     '<button data-act="pin" title="Pin message" aria-label="Pin message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l-1 6 3 3H6l3-3-1-6Z"/><path d="M12 13v7"/></svg></button>' +
-    (mine ? '<button data-act="edit" title="Edit" aria-label="Edit message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L19 8.5 15.5 5 4 16.5Z"/><path d="m13.8 6.7 3.5 3.5"/></svg></button>' : "") +
-    ((mine || isAdmin()) ? '<button data-act="del" title="Delete" aria-label="Delete message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5"/></svg></button>' : "") +
+    ((mine || canManageMessage) ? '<button data-act="edit" title="Edit" aria-label="Edit message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L19 8.5 15.5 5 4 16.5Z"/><path d="m13.8 6.7 3.5 3.5"/></svg></button>' : "") +
+    ((mine || canManageMessage) ? '<button data-act="del" title="Delete" aria-label="Delete message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5"/></svg></button>' : "") +
     "</div>";
   el.innerHTML = html;
   const messageAvatar = el.querySelector(".ma");
@@ -3825,11 +4319,20 @@ function buildMsgEl(key, m, typeScope, path){
     ? ((settings && settings.avatar) || profileAvatarCache[m.uid] || "")
     : ((presenceCache[m.uid] && presenceCache[m.uid].avatar) || profileAvatarCache[m.uid] || "");
   renderProfileAvatar(messageAvatar, cachedAvatar, m.u);
-  if(m.uid && !Object.prototype.hasOwnProperty.call(profileAvatarCache, m.uid)){
+  if(m.uid && !m.bot && !Object.prototype.hasOwnProperty.call(profileAvatarCache, m.uid)){
     loadPublicAvatar(m.uid, messageAvatar, m.u);
   }
   const authorButton = el.querySelector(".mu");
-  if(authorButton){
+  if(authorButton && m.bot){
+    authorButton.style.cursor="default";
+    authorButton.removeAttribute("role");
+    authorButton.removeAttribute("tabindex");
+    const botBadge=document.createElement("span");botBadge.className="prism-bot-badge";botBadge.textContent="BOT";
+    authorButton.insertAdjacentElement("afterend",botBadge);
+  }else if(authorButton){
+    const roleId=serverPathMatch && m.uid ? ((serverMemberRoleCache[serverPathMatch[1]]||{})[m.uid]||"member") : "";
+    const memberRole=roleId && (serverRoleCache[serverPathMatch[1]]||{})[roleId];
+    if(memberRole && /^#[0-9a-f]{6}$/i.test(memberRole.color||""))authorButton.style.color=memberRole.color;
     authorButton.tabIndex = 0;
     authorButton.setAttribute("role", "button");
     authorButton.setAttribute("aria-label", "Open " + m.u + "'s profile");
@@ -4007,6 +4510,14 @@ function wireInput(){
 function send(){
   const t = $("minput").value.trim();
   if(!t || !me) return;
+  if(view.type==="server" && view.cid && !canServerPermission(view.sid,"sendMessages")){
+    toast("You don't have permission to send messages in this server.");
+    return;
+  }
+  if(view.type==="server" && /(^|[^a-zA-Z0-9_])@everyone(?=$|[^a-zA-Z0-9_])/i.test(t) && !canServerPermission(view.sid,"mentionEveryone")){
+    toast("You don't have permission to mention @everyone.");
+    return;
+  }
   const msg = {uid: me.uid, u: me.name, t: t.slice(0, 2000), ts: TS};
   const mentionedUids = [];
   const knownMentionUsers = collectMentionUsers();
@@ -4015,7 +4526,7 @@ function send(){
   while((mentionMatch = mentionPattern.exec(t))){
     const mentionedName = mentionMatch[2];
     if(mentionedName.toLowerCase() === "everyone"){
-      if(view.type === "server" && view.cid && view.ctype !== "forum") mentionsEveryone = true;
+      if(view.type === "server" && view.cid && view.ctype !== "forum" && canServerPermission(view.sid,"mentionEveryone")) mentionsEveryone = true;
       continue;
     }
     const user = knownMentionUsers.find(item => item.name.toLowerCase() === mentionedName.toLowerCase());
@@ -4032,8 +4543,10 @@ function send(){
       db.ref("prism/forum/" + view.sid + "/" + view.cid + "/" + pid + "/replyCount")
         .transaction(c => (c || 0) + 1).catch(() => {});
     }else{
-      const scope = "s_" + view.sid + "_" + view.cid;
-      db.ref("prism/messages/" + view.sid + "/" + view.cid).push(msg)
+      const commandServerId=view.sid,commandChannelId=view.cid;
+      const scope = "s_" + commandServerId + "_" + commandChannelId;
+      db.ref("prism/messages/" + commandServerId + "/" + commandChannelId).push(msg)
+        .then(()=>runServerBotCommand(commandServerId,commandChannelId,t).catch(()=>{}))
         .catch(() => toast("Couldn't send — check your connection."));
       db.ref("prism/typing/" + scope + "/" + me.uid).remove().catch(() => {});
     }
