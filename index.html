@@ -1417,6 +1417,7 @@
   .server-bot-enable small { display:block; margin-top:4px; color:var(--dim); font-size:10px; line-height:1.45; }
   .server-bot-command-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; padding:12px; margin:10px 0 14px; border:1px solid color-mix(in srgb,var(--text) 8%,transparent); border-radius:7px; }
   .server-bot-command-list code { color:var(--text); }
+  .prism-bot-badge { display:inline-block; margin-left:5px; padding:2px 4px; border-radius:3px; background:var(--accent); color:#fff; font-size:8px; font-weight:850; line-height:1.2; vertical-align:middle; }
   @media(max-width:560px) {
     .server-control-shell { padding:15px; max-height:94vh; }
     .server-control-grid { grid-template-columns:minmax(0,1fr); gap:0; }
@@ -3848,6 +3849,12 @@ function toggleSrvMenu(e){
     customize.textContent="⚙️ Customize server";
     customize.onclick=()=>{closeSrvMenu();openServerControl(sid,"general");};
     m.appendChild(customize);
+    if(servers[sid].owner!==me.uid){
+      const changeIcon=document.createElement("button");
+      changeIcon.textContent="🖼️ Change server icon";
+      changeIcon.onclick=()=>{closeSrvMenu();changeServerIcon(sid);};
+      m.appendChild(changeIcon);
+    }
   }
   if(canServerPermission(sid,"manageRoles")){
     const roles=document.createElement("button");
@@ -4311,11 +4318,20 @@ function buildMsgEl(key, m, typeScope, path){
     ? ((settings && settings.avatar) || profileAvatarCache[m.uid] || "")
     : ((presenceCache[m.uid] && presenceCache[m.uid].avatar) || profileAvatarCache[m.uid] || "");
   renderProfileAvatar(messageAvatar, cachedAvatar, m.u);
-  if(m.uid && !Object.prototype.hasOwnProperty.call(profileAvatarCache, m.uid)){
+  if(m.uid && !m.bot && !Object.prototype.hasOwnProperty.call(profileAvatarCache, m.uid)){
     loadPublicAvatar(m.uid, messageAvatar, m.u);
   }
   const authorButton = el.querySelector(".mu");
-  if(authorButton){
+  if(authorButton && m.bot){
+    authorButton.style.cursor="default";
+    authorButton.removeAttribute("role");
+    authorButton.removeAttribute("tabindex");
+    const botBadge=document.createElement("span");botBadge.className="prism-bot-badge";botBadge.textContent="BOT";
+    authorButton.insertAdjacentElement("afterend",botBadge);
+  }else if(authorButton){
+    const roleId=serverPathMatch && m.uid ? ((serverMemberRoleCache[serverPathMatch[1]]||{})[m.uid]||"member") : "";
+    const memberRole=roleId && (serverRoleCache[serverPathMatch[1]]||{})[roleId];
+    if(memberRole && /^#[0-9a-f]{6}$/i.test(memberRole.color||""))authorButton.style.color=memberRole.color;
     authorButton.tabIndex = 0;
     authorButton.setAttribute("role", "button");
     authorButton.setAttribute("aria-label", "Open " + m.u + "'s profile");
@@ -4526,9 +4542,10 @@ function send(){
       db.ref("prism/forum/" + view.sid + "/" + view.cid + "/" + pid + "/replyCount")
         .transaction(c => (c || 0) + 1).catch(() => {});
     }else{
-      const scope = "s_" + view.sid + "_" + view.cid;
-      db.ref("prism/messages/" + view.sid + "/" + view.cid).push(msg)
-        .then(()=>runServerBotCommand(view.sid,view.cid,t))
+      const commandServerId=view.sid,commandChannelId=view.cid;
+      const scope = "s_" + commandServerId + "_" + commandChannelId;
+      db.ref("prism/messages/" + commandServerId + "/" + commandChannelId).push(msg)
+        .then(()=>runServerBotCommand(commandServerId,commandChannelId,t).catch(()=>{}))
         .catch(() => toast("Couldn't send — check your connection."));
       db.ref("prism/typing/" + scope + "/" + me.uid).remove().catch(() => {});
     }
