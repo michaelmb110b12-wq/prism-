@@ -4509,7 +4509,7 @@ function send(){
   while((mentionMatch = mentionPattern.exec(t))){
     const mentionedName = mentionMatch[2];
     if(mentionedName.toLowerCase() === "everyone"){
-      if(view.type === "server" && view.cid && view.ctype !== "forum") mentionsEveryone = true;
+      if(view.type === "server" && view.cid && view.ctype !== "forum" && canServerPermission(view.sid,"mentionEveryone")) mentionsEveryone = true;
       continue;
     }
     const user = knownMentionUsers.find(item => item.name.toLowerCase() === mentionedName.toLowerCase());
