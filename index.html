@@ -3330,9 +3330,6 @@ function copyText(t){
 }
 function openServer(sid){
   if(!servers[sid]) return;
-  homeView = false;
-  discoverView = false;
-  updateHomeLayout();
   if(sid !== "official" && !(myServers && myServers[sid])){
     toast("You need an invite link to join that server.");
     return;
@@ -3341,6 +3338,9 @@ function openServer(sid){
     toast("You don't have permission to view this server's channels.");
     return;
   }
+  homeView = false;
+  discoverView = false;
+  updateHomeLayout();
   ensureServerPermissionListeners(sid);
   document.documentElement.style.setProperty("--server-accent",safeServerAccent(servers[sid].accentColor));
   setMobilePane("channels");
