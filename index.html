@@ -2626,6 +2626,8 @@ function updateHomeLayout(){
     $("chtopic").textContent = "";
     $("pinbtn").classList.add("hidden");
     $("chdel").classList.add("hidden");
+    $("chedit").classList.add("hidden");
+    document.documentElement.style.removeProperty("--server-accent");
   }
 }
 function applySidebarSearch(){
@@ -2867,6 +2869,7 @@ async function startDMWithUser(uid,name){
 function openHome(){
   homeView = true;
   discoverView = false;
+  document.documentElement.style.removeProperty("--server-accent");
   setMobilePane("home");
   unlisten();
   updateHomeLayout();
@@ -3092,6 +3095,7 @@ function discoveryRecordMap(){
 function openDiscover(){
   homeView = false;
   discoverView = true;
+  document.documentElement.style.removeProperty("--server-accent");
   setMobilePane("discover");
   unlisten();
   updateHomeLayout();
@@ -3331,6 +3335,12 @@ function openServer(sid){
     toast("You need an invite link to join that server.");
     return;
   }
+  if(!canServerPermission(sid,"viewChannels")){
+    toast("You don't have permission to view this server's channels.");
+    return;
+  }
+  ensureServerPermissionListeners(sid);
+  document.documentElement.style.setProperty("--server-accent",safeServerAccent(servers[sid].accentColor));
   setMobilePane("channels");
   if(chanListRef){ chanListRef.off(); chanListRef = null; }
   unlisten();
@@ -3359,6 +3369,7 @@ function openServer(sid){
   });
 }
 function openChannel(sid, cid, cname, topic, ctype, autoSelect = false){
+  if(!canServerPermission(sid,"viewChannels")){toast("You don't have permission to view this channel.");return;}
   homeView = false;
   discoverView = false;
   updateHomeLayout();
@@ -3369,8 +3380,9 @@ function openChannel(sid, cid, cname, topic, ctype, autoSelect = false){
   document.querySelectorAll("#srv-channels .chan").forEach(el => el.classList.remove("active"));
   $("ch-hash").textContent = (ctype === "forum") ? "📝" : "#";
   $("chname").textContent = cname;
-  $("chtopic").textContent = topic;
-  $("chdel").classList.toggle("hidden", !isAdmin());
+  $("chtopic").textContent = topic || ((cid==="general"&&servers[sid]&&servers[sid].welcomeMessage)||"");
+  $("chdel").classList.toggle("hidden", !canServerPermission(sid,"manageChannels"));
+  $("chedit").classList.toggle("hidden", !canServerPermission(sid,"manageChannels"));
   if((ctype || "chat") === "forum"){
     renderForum();
   }else{
@@ -3384,7 +3396,7 @@ function openChannel(sid, cid, cname, topic, ctype, autoSelect = false){
 $("ch-add").onclick = () => {
   const sid = view.type === "server" ? view.sid : $("srv-title").dataset.sid;
   if(!sid || !servers[sid]) return;
-  if(servers[sid].owner !== me.uid){ toast("Only the server owner can create channels."); return; }
+  if(!canServerPermission(sid,"manageChannels")){ toast("You don't have permission to manage channels."); return; }
   openModal("Create channel", "What should the channel be called?", "announcements", "Next", name => {
     if(!name.trim()) return;
     pickChannelType(sid, name.trim().slice(0, 24).toLowerCase().replace(/\s+/g, "-"));
@@ -3421,6 +3433,7 @@ function restoreModalButtons(){
   closeModal();
 }
 async function createChannel(sid, cname, type){
+  if(!canServerPermission(sid,"manageChannels")){toast("You don't have permission to create channels.");return;}
   try{
     const ref = db.ref("prism/serverChannels/" + sid).push();
     await ref.set({name: cname, type: type, createdAt: TS});
@@ -3429,13 +3442,14 @@ async function createChannel(sid, cname, type){
   }catch(e){ toast("Couldn't create the channel."); }
 }
 $("chdel").onclick = () => {
-  if(view.type !== "server" || !view.cid || !isAdmin()) return;
+  if(view.type !== "server" || !view.cid || !canServerPermission(view.sid,"manageChannels")) return;
   const sid = view.sid, cid = view.cid, ctype = view.ctype, cname = view.cname;
   openModal("Delete channel", "Really delete #" + cname + "? This removes the channel and everything in it. This can't be undone.",
     "", "Delete", () => deleteChannel(sid, cid, ctype));
   $("m-input").style.display = "none";
 };
 async function deleteChannel(sid, cid, ctype){
+  if(!canServerPermission(sid,"manageChannels")){toast("You don't have permission to delete channels.");return;}
   try{
     await db.ref("prism/serverChannels/" + sid + "/" + cid).remove();
     if(ctype === "forum"){
@@ -3452,6 +3466,22 @@ async function deleteChannel(sid, cid, ctype){
   }catch(e){ toast("Couldn't delete the channel."); }
 }
 
+$("chedit").onclick=()=>{
+  if(view.type!=="server"||!view.cid||!canServerPermission(view.sid,"manageChannels"))return;
+  const sid=view.sid,cid=view.cid,ctype=view.ctype;
+  openModal("Edit channel","Update the channel name (up to 24 characters).",view.cname||"general","Next",name=>{
+    const newName=String(name||"").trim().toLowerCase().slice(0,24).replace(/[^a-z0-9_-]/g,"-").replace(/-+/g,"-");
+    if(!newName){toast("Enter a valid channel name.");return;}
+    openModal("Edit channel topic","Set a short channel topic (up to 40 characters).",String(view.topic||""),"Save",async topic=>{
+      try{
+        const cleanTopic=String(topic||"").trim().slice(0,40);
+        await db.ref("prism/serverChannels/"+sid+"/"+cid).update({name:newName,topic:cleanTopic});
+        openServer(sid);openChannel(sid,cid,newName,cleanTopic,ctype,true);
+        toast("Channel updated.");
+      }catch(error){toast("Couldn't update the channel. Check Firebase rules.");}
+    });
+  });
+};
 /* ---------------- forum channels ---------------- */
 const ftime = ts => new Date(ts || Date.now())
   .toLocaleString(undefined, {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
@@ -3493,6 +3523,7 @@ function renderForum(){
 }
 function newForumPost(){
   const sid = view.sid, cid = view.cid;
+  if(!canServerPermission(sid,"createPosts")){toast("You don't have permission to create forum posts.");return;}
   openModal("New post", "Give your post a title.", "My awesome post", "Next", title => {
     if(!title.trim()) return;
     openModal("New post", "What's it about?", "Write something...", "Post", body => {
@@ -3812,6 +3843,25 @@ function toggleSrvMenu(e){
       m.appendChild(ds);
     }
   }
+  if(canServerPermission(sid,"manageServer")){
+    const customize=document.createElement("button");
+    customize.textContent="⚙️ Customize server";
+    customize.onclick=()=>{closeSrvMenu();openServerControl(sid,"general");};
+    m.appendChild(customize);
+  }
+  if(canServerPermission(sid,"manageRoles")){
+    const roles=document.createElement("button");
+    roles.textContent="🛡️ Roles & permissions";
+    roles.onclick=()=>{closeSrvMenu();openServerControl(sid,"roles");};
+    m.appendChild(roles);
+  }
+  if(canServerPermission(sid,"manageBots")){
+    const bots=document.createElement("button");
+    bots.textContent="🤖 Bot settings";
+    bots.onclick=()=>{closeSrvMenu();openServerControl(sid,"bots");};
+    m.appendChild(bots);
+  }
+
   if(isAjgplayz() && sid !== "official"){
     const verify = document.createElement("button");
     verify.textContent = servers[sid].verified === true ? "☑ Remove verification" : "☑ Verify server";
@@ -3846,7 +3896,7 @@ function leaveServer(sid){
   toast("You left the server.");
 }
 function changeServerIcon(sid){
-  if(!me || !servers[sid] || (servers[sid].owner !== me.uid && !isAdmin())) return;
+  if(!me || !servers[sid] || !canServerPermission(sid,"manageServer")) return;
   let draftIcon = "";
   const safeIcon = value => typeof value === "string" && value.length <= 2100000 &&
     (/^https:\/\/[^\s"'<>]+$/i.test(value) || /^data:image\/(?:gif|jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(value));
@@ -4229,6 +4279,8 @@ function renderMessages(path, typeScope){
 function buildMsgEl(key, m, typeScope, path){
   const d = new Date(m.ts || Date.now());
   const mine = m.uid === me.uid;
+  const serverPathMatch=String(path||"").match(/^prism\/(?:messages|forumReplies)\/([^/]+)/);
+  const canManageMessage=serverPathMatch?canServerPermission(serverPathMatch[1],"manageMessages"):isAdmin();
   const el = document.createElement("div");
   el.className = "msg";
   el.dataset.key = key;
@@ -4250,8 +4302,8 @@ function buildMsgEl(key, m, typeScope, path){
     '<button data-act="react" title="Add reaction" aria-label="Add reaction">😊</button>' +
     '<button data-act="reply" title="Reply" aria-label="Reply"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 15 4 10l5-5M4 10h9a7 7 0 0 1 7 7v2"/></svg></button>' +
     '<button data-act="pin" title="Pin message" aria-label="Pin message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l-1 6 3 3H6l3-3-1-6Z"/><path d="M12 13v7"/></svg></button>' +
-    (mine ? '<button data-act="edit" title="Edit" aria-label="Edit message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L19 8.5 15.5 5 4 16.5Z"/><path d="m13.8 6.7 3.5 3.5"/></svg></button>' : "") +
-    ((mine || isAdmin()) ? '<button data-act="del" title="Delete" aria-label="Delete message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5"/></svg></button>' : "") +
+    ((mine || canManageMessage) ? '<button data-act="edit" title="Edit" aria-label="Edit message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.8 4.3 4.3-.8L19 8.5 15.5 5 4 16.5Z"/><path d="m13.8 6.7 3.5 3.5"/></svg></button>' : "") +
+    ((mine || canManageMessage) ? '<button data-act="del" title="Delete" aria-label="Delete message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13M10 11v5m4-5v5"/></svg></button>' : "") +
     "</div>";
   el.innerHTML = html;
   const messageAvatar = el.querySelector(".ma");
@@ -4441,6 +4493,14 @@ function wireInput(){
 function send(){
   const t = $("minput").value.trim();
   if(!t || !me) return;
+  if(view.type==="server" && view.cid && !canServerPermission(view.sid,"sendMessages")){
+    toast("You don't have permission to send messages in this server.");
+    return;
+  }
+  if(view.type==="server" && /(^|[^a-zA-Z0-9_])@everyone(?=$|[^a-zA-Z0-9_])/i.test(t) && !canServerPermission(view.sid,"mentionEveryone")){
+    toast("You don't have permission to mention @everyone.");
+    return;
+  }
   const msg = {uid: me.uid, u: me.name, t: t.slice(0, 2000), ts: TS};
   const mentionedUids = [];
   const knownMentionUsers = collectMentionUsers();
@@ -4468,6 +4528,7 @@ function send(){
     }else{
       const scope = "s_" + view.sid + "_" + view.cid;
       db.ref("prism/messages/" + view.sid + "/" + view.cid).push(msg)
+        .then(()=>runServerBotCommand(view.sid,view.cid,t))
         .catch(() => toast("Couldn't send — check your connection."));
       db.ref("prism/typing/" + scope + "/" + me.uid).remove().catch(() => {});
     }
