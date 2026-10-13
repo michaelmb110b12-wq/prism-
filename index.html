@@ -2494,16 +2494,17 @@ async function saveServerRole(roleId,card){
   catch(error){toast("Couldn't save the role. Check Firebase rules for prism/serverRoles.");}
 }
 async function deleteServerRole(roleId,name){
-  const sid=serverControlSid;if(!sid||!canServerPermission(sid,"manageRoles")||SERVER_BUILTIN_ROLES.has(roleId))return;
-  openModal("Delete role","Delete the "+name+" role and return its members to the default Member role?","","Delete",async()=>{
-    try{
-      const changes={};changes["prism/serverRoles/"+sid+"/"+roleId]=null;
-      Object.entries(serverControlMemberRoles||{}).forEach(([uid,assigned])=>{if(assigned===roleId)changes["prism/serverMemberRoles/"+sid+"/"+uid]=null;});
-      await db.ref().update(changes);delete serverControlRoles[roleId];
-      Object.keys(serverControlMemberRoles).forEach(uid=>{if(serverControlMemberRoles[uid]===roleId)delete serverControlMemberRoles[uid];});
-      serverRoleCache[sid]=serverControlRoles;serverMemberRoleCache[sid]=serverControlMemberRoles;renderServerRoles();renderServerMembers();toast("Role deleted.");
-    }catch(error){toast("Couldn't delete the role. Check Firebase rules.");}
-  });$("m-input").style.display="none";
+  const sid=serverControlSid;
+  if(!sid||!canServerPermission(sid,"manageRoles")||SERVER_BUILTIN_ROLES.has(roleId))return;
+  if(!window.confirm("Delete the "+name+" role and return its members to the default Member role?"))return;
+  try{
+    const changes={};changes["prism/serverRoles/"+sid+"/"+roleId]=null;
+    Object.entries(serverControlMemberRoles||{}).forEach(([uid,assigned])=>{if(assigned===roleId)changes["prism/serverMemberRoles/"+sid+"/"+uid]=null;});
+    await db.ref().update(changes);delete serverControlRoles[roleId];
+    Object.keys(serverControlMemberRoles).forEach(uid=>{if(serverControlMemberRoles[uid]===roleId)delete serverControlMemberRoles[uid];});
+    serverRoleCache[sid]=serverControlRoles;serverMemberRoleCache[sid]=serverControlMemberRoles;
+    renderServerRoles();renderServerMembers();toast("Role deleted.");
+  }catch(error){toast("Couldn't delete the role. Check Firebase rules.");}
 }
 function renderServerMembers(){
   const box=$("server-members-list");if(!box)return;box.replaceChildren();
