@@ -413,9 +413,10 @@ function peer(uid,v){
  let p=s.peers.get(uid);if(p&&p.session===v.session)return p;if(p)removePeer(uid);
  const pc=new RTCPeerConnection({iceServers:s.ice}),a=document.createElement("audio");
  a.autoplay=true;a.playsInline=true;a.style.display="none";a.muted=s.deafened;document.body.appendChild(a);
- p={uid,session:v.session,name:v.name||"Prism user",pc,audio:a,video:null,videoTrack:null,shareSender:null,cameraSender:null,pending:[],remote:false,offered:false,needsRenegotiation:false};
+ p={uid,session:v.session,name:v.name||"Prism user",pc,audio:a,video:null,videoTrack:null,audioSender:null,shareSender:null,cameraSender:null,pending:[],remote:false,offered:false,needsRenegotiation:false};
  s.peers.set(uid,p);
- if(s.stream)s.stream.getAudioTracks().forEach(t=>pc.addTrack(t,s.stream));
+ if(s.stream&&s.stream.getAudioTracks().length){s.stream.getAudioTracks().forEach(t=>{const sender=pc.addTrack(t,s.stream);if(!p.audioSender)p.audioSender=sender;});}
+ else p.audioSender=pc.addTransceiver("audio",{direction:"sendrecv"}).sender;
  if(s.screenStream){const track=s.screenStream.getVideoTracks()[0];if(track)p.shareSender=pc.addTrack(track,s.screenStream);}
  if(s.cameraStream){const track=s.cameraStream.getVideoTracks()[0];if(track)p.cameraSender=pc.addTrack(track,s.cameraStream);}
  pc.onicecandidate=e=>{if(e.candidate)send(uid,p.session,"candidate",e.candidate.toJSON?e.candidate.toJSON():e.candidate);};
@@ -545,37 +546,114 @@ async function stop(error){
  if(s.pr&&s.ph)s.pr.off("value",s.ph);if(s.inbox&&s.ih)s.inbox.off("child_added",s.ih);
  if(s.inviteStateRef&&s.inviteStateHandler)s.inviteStateRef.off("value",s.inviteStateHandler);
  s.inviteStateRef=null;s.inviteStateHandler=null;
- s.joined=false;s.joining=false;s.muted=false;s.deafened=false;
+ s.joined=false;s.joining=false;s.muted=true;s.deafened=false;
  if(s.screenStream)stopShare(false);
  if(s.cameraStream)stopCamera(false);
  s.room=null;s.session=null;s.people={};Array.from(s.peers.keys()).forEach(removePeer);
  if(s.stream){s.stream.getTracks().forEach(t=>t.stop());s.stream=null;}
+ if(s.silentOscillator){try{s.silentOscillator.stop();}catch(_){}s.silentOscillator=null;}
+ if(s.silentAudioGain){try{s.silentAudioGain.disconnect();}catch(_){}s.silentAudioGain=null;}
+ if(s.silentAudioContext){try{await s.silentAudioContext.close();}catch(_){}s.silentAudioContext=null;}
+ s.usingSyntheticAudio=false;
  if(s.ownRef){try{await s.ownRef.remove();}catch(_){}}
  if(direct&&direct.invitePath)db.ref(direct.invitePath).remove().catch(()=>{});
  s.pr=null;s.ownRef=null;s.inbox=null;s.ph=null;s.ih=null;s.directTarget=null;
  overlay.classList.remove("voice-visible");overlay.classList.add("hidden");
- mute.classList.remove("voice-muted");deafen.classList.remove("voice-muted");note.textContent="Your microphone is only used while connected.";
+ mute.classList.remove("voice-muted");deafen.classList.remove("voice-muted");note.textContent="Voice starts muted. Your microphone is only requested when you choose Unmute.";
  refresh();render();if(error)msg(error);
+}
+async function createSilentAudioStream(){
+ const MediaStreamCtor=window.MediaStream;
+ if(!MediaStreamCtor)return null;
+ const Ctx=window.AudioContext||window.webkitAudioContext;
+ if(!Ctx)return new MediaStreamCtor();
+ try{
+  const context=new Ctx();
+  const destination=context.createMediaStreamDestination();
+  const oscillator=context.createOscillator();
+  const gain=context.createGain();
+  gain.gain.value=0;
+  oscillator.connect(gain);gain.connect(destination);oscillator.start();
+  s.silentAudioContext=context;s.silentOscillator=oscillator;s.silentAudioGain=gain;
+  try{await context.resume();}catch(_){}
+  return destination.stream;
+ }catch(e){
+  console.warn("Unable to create silent voice track",e);
+  return new MediaStreamCtor();
+ }
+}
+async function enableMicrophone(){
+ if(!s.joined||!s.muted)return;
+ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+  note.textContent="You're still connected muted. Microphone access isn't available in this browser.";
+  return;
+ }
+ try{
+  note.textContent="Requesting microphone permission…";
+  const microphone=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+  if(!s.joined){microphone.getTracks().forEach(track=>track.stop());return;}
+  const track=microphone.getAudioTracks()[0];
+  if(!track){microphone.getTracks().forEach(t=>t.stop());note.textContent="You're still connected muted; no microphone track was found.";return;}
+  const previousStream=s.stream;
+  s.stream=microphone;s.usingSyntheticAudio=false;track.enabled=true;
+  const replacements=[];
+  s.peers.forEach(p=>{
+   if(p.audioSender){
+    replacements.push(p.audioSender.replaceTrack(track).catch(error=>{
+     console.warn("Audio track replacement failed; renegotiating",error);
+     try{p.audioSender=p.pc.addTrack(track,microphone);renegotiate(p);}catch(_){}
+    }));
+   }else{
+    try{p.audioSender=p.pc.addTrack(track,microphone);renegotiate(p);}catch(error){console.warn("Unable to add microphone to peer",error);}
+   }
+  });
+  await Promise.all(replacements);
+  if(s.silentOscillator){try{s.silentOscillator.stop();}catch(_){}s.silentOscillator=null;}
+  if(s.silentAudioGain){try{s.silentAudioGain.disconnect();}catch(_){}s.silentAudioGain=null;}
+  if(s.silentAudioContext){try{await s.silentAudioContext.close();}catch(_){}s.silentAudioContext=null;}
+  if(previousStream&&previousStream!==microphone)previousStream.getTracks().forEach(oldTrack=>oldTrack.stop());
+  s.muted=false;
+  note.textContent="Microphone on. Select Mute to stop transmitting.";
+  render();
+ }catch(error){
+  note.textContent=error&&error.name==="NotAllowedError"?"Microphone permission was denied. You're still connected muted.":"Couldn't enable the microphone. You're still connected muted.";
+  render();
+ }
+}
+async function toggleMicrophone(){
+ if(!s.joined){note.textContent="Join voice first. You can join muted without a microphone.";return;}
+ if(s.muted){
+  if(s.usingSyntheticAudio){await enableMicrophone();return;}
+  s.muted=false;
+  if(s.stream)s.stream.getAudioTracks().forEach(track=>track.enabled=true);
+  note.textContent="Microphone on. Select Mute to stop transmitting.";
+ }else{
+  s.muted=true;
+  if(s.stream)s.stream.getAudioTracks().forEach(track=>track.enabled=false);
+  note.textContent="Microphone muted.";
+ }
+ render();
 }
 async function start(){
  const runRevision=++s.revision;
  s.peopleReady=false;
  const r=current();if(!r)return msg("Open a server text channel or direct message first.");
  if(!me||!me.uid||!firebase.auth().currentUser)return msg("Log in to Prism first.");
- if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!window.RTCPeerConnection)return msg("Voice requires HTTPS, a microphone, and WebRTC support.");
- s.joining=true;s.room=r;showCall();refresh();render();note.textContent="Requesting microphone permission…";
+ if(!window.RTCPeerConnection||!window.MediaStream)return msg("Voice requires HTTPS and WebRTC support. You can join muted without a microphone.");
+ s.joining=true;s.muted=true;s.usingSyntheticAudio=true;s.room=r;showCall();refresh();render();note.textContent="Joining voice muted…";
  try{
-  s.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+  s.stream=await createSilentAudioStream();
+  if(!s.stream)s.stream=new MediaStream();
   if(runRevision!==s.revision){if(s.stream)s.stream.getTracks().forEach(t=>t.stop());s.stream=null;return;}
   s.session=window.crypto&&crypto.randomUUID?crypto.randomUUID().replace(/-/g,""):Date.now().toString(36)+Math.random().toString(36).slice(2);
   s.pr=db.ref(base(r)+"/participants");s.ownRef=s.pr.child(me.uid);s.inbox=db.ref(base(r)+"/signals/"+me.uid);
   await s.ownRef.onDisconnect().remove();await s.ownRef.set({name:String(me.name||"Prism user").slice(0,20),avatar:avatarSourceOk(ownAvatar())?ownAvatar():"",session:s.session,joinedAt:Date.now()});
-  s.joined=true;s.joining=false;note.textContent=s.directTarget?"Private call is connected through peer-to-peer voice.":"Voice is peer-to-peer. Screen sharing is optional; headphones reduce echo.";
+  s.joined=true;s.joining=false;note.textContent="Connected muted. No microphone permission is requested unless you select Unmute.";
   s.ph=x=>peopleChanged(x);s.ih=x=>gotSignal(x);s.pr.on("value",s.ph);s.inbox.on("child_added",s.ih);
   refresh();render();
  }catch(e){
   console.error(e);
-  await stop(e&&e.name==="NotAllowedError"?"Microphone permission was denied.":e&&e.code==="PERMISSION_DENIED"?"Firebase denied voice access. The Firebase owner must publish the voice rules.":e&&e.message||"Could not start voice chat.");
+  await stop(e&&e.code==="PERMISSION_DENIED"?"Firebase denied voice access. The Firebase owner must publish the voice rules.":e&&e.message||"Could not start voice chat.");
  }
 }
 join.addEventListener("click",()=>{if(s.joined)showCall();else if(s.joining)stop();else start();});
@@ -609,7 +687,7 @@ dmCall.addEventListener("click",()=>{
  if(s.joined&&s.directTarget&&s.directTarget.uid===view.otherUid){showCall();return;}
  callUser(view.otherUid,view.otherName||"user");
 });
-mute.addEventListener("click",()=>{if(!s.stream)return;s.muted=!s.muted;s.stream.getAudioTracks().forEach(t=>t.enabled=!s.muted);render();});
+mute.addEventListener("click",()=>{toggleMicrophone().catch(error=>{console.warn("microphone toggle",error);note.textContent="You’re still connected muted.";});});
 deafen.addEventListener("click",()=>{s.deafened=!s.deafened;s.peers.forEach(p=>{p.audio.muted=s.deafened;});render();});
 shareBtn.addEventListener("click",toggleShare);
 cameraBtn.addEventListener("click",toggleCamera);
