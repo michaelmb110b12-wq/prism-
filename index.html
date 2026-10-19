@@ -5329,6 +5329,8 @@ async function applyMaplzAccountMerge(sourceUid,keeperUid){
   const status=$("admin-merge-maplz-status"),button=$("admin-merge-maplz-button");
   if(!isRootAdmin())return;
   if(sourceUid===keeperUid)throw new Error("Source and keeper UIDs must be different.");
+  if(!/^[A-Za-z0-9_-]{1,128}$/.test(sourceUid)||!/^[A-Za-z0-9_-]{1,128}$/.test(keeperUid))throw new Error("An account UID has an invalid format.");
+  const actorUid=me.uid,actorName=me.name;
   if(status)status.textContent="Preparing the exact account merge…";
   if(button)button.disabled=true;
   try{
@@ -5371,7 +5373,7 @@ async function applyMaplzAccountMerge(sourceUid,keeperUid){
       grantedByUid:keeperUid,grantedAt:now,root:true
     };
     updates[MAPLZ_MERGE_MARKER]={
-      completed:true,completedAt:now,completedByUid:me.uid,completedByName:me.name,
+      completed:true,completedAt:now,completedByUid:actorUid,completedByName:actorName,
       keeperUid:keeperUid,removedUid:sourceUid,keeperUsername:"Maplz",sourceUsername:"Maplz",previousKeeperUsername:"Maplz_",
       policy:"Only Maplz_ account data kept; no Maplz profile/settings data copied."
     };
@@ -5428,6 +5430,7 @@ async function applyMaplzAccountMerge(sourceUid,keeperUid){
           updates["prism/groupDMs/"+groupId+"/members/"+sourceUid]=null;
         if(group.names&&Object.prototype.hasOwnProperty.call(group.names,sourceUid))
           updates["prism/groupDMs/"+groupId+"/names/"+sourceUid]=null;
+        if(group.owner===sourceUid)updates["prism/groupDMs/"+groupId+"/owner"]=null;
       });
       const userGroupsSnap=await db.ref("prism/userGroupDMs").once("value");
       const userGroups=userGroupsSnap.val()||{};
@@ -5437,6 +5440,7 @@ async function applyMaplzAccountMerge(sourceUid,keeperUid){
           const group=userGroups[ownerUid][groupId]||{};
           if(group.members&&Object.prototype.hasOwnProperty.call(group.members,sourceUid))
             updates["prism/userGroupDMs/"+ownerUid+"/"+groupId+"/members/"+sourceUid]=null;
+          if(group.owner===sourceUid)updates["prism/userGroupDMs/"+ownerUid+"/"+groupId+"/owner"]=null;
         });
       });
     }catch(e){throw new Error("Couldn't inspect group membership links. No changes were made.");}
@@ -5451,8 +5455,8 @@ async function applyMaplzAccountMerge(sourceUid,keeperUid){
 
     await db.ref().update(updates);
     legacyMaplzRootUid=null;
-    if(me.uid===keeperUid)me.name="Maplz";
-    if(me.uid===sourceUid){
+    if(me&&actorUid===keeperUid)me.name="Maplz";
+    if(actorUid===sourceUid){
       toast("Account merge completed. The old Maplz session is being signed out; log back in as Maplz using the former Maplz_ account password.");
       await auth.signOut();
       return;
