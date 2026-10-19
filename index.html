@@ -1814,7 +1814,7 @@
           <h4>Administrator access</h4>
           <span>Root admins only</span>
         </div>
-        <p class="admin-help">Ajgplayz and Maplz_ are protected root admins. You can grant or revoke delegated admin access below.</p>
+        <p class="admin-help">Ajgplayz remains a protected root admin. The migration below keeps Maplz_ account data and normalizes its username to Maplz. You can grant or revoke delegated admin access below.</p>
         <div class="admin-grant-row">
           <input id="admin-grant-username" type="text" maxlength="20" autocomplete="off" placeholder="Prism username">
           <button id="admin-grant-button" type="button">Make admin</button>
@@ -1988,13 +1988,14 @@ const $ = id => document.getElementById(id);
 const COLORS = ["#5865f2","#8b5cf6","#ec4899","#22d3ee","#4ade80","#fb923c","#f472b6","#facc15"];
 const colorFor = n => COLORS[[...String(n)].reduce((a,c)=>a+c.charCodeAt(0),0) % COLORS.length];
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const ROOT_ADMIN_NAMES = new Set(["ajgplayz", "maplz", "maplz_"]);
+const ROOT_ADMIN_NAMES = new Set(["ajgplayz", "maplz"]);
 const MAPLZ_MERGE_MARKER = "prism/adminMigrations/maplz-account-merge";
+let legacyMaplzRootUid = null;
 let delegatedAdminGrant = null;
 let adminPanelData = {users:{}, presence:{}, admins:{}, deletedAccounts:{}};
 let adminPanelLoaded = false;
 let adminDeletedAccountsUnavailable=false;
-const isRootAdmin = () => !!(me && ROOT_ADMIN_NAMES.has(String(me.name || "").trim().toLowerCase()));
+const isRootAdmin = () => !!(me && (ROOT_ADMIN_NAMES.has(String(me.name || "").trim().toLowerCase()) || (String(me.name || "").trim().toLowerCase() === "maplz_" && legacyMaplzRootUid === me.uid)));
 const isAdmin = () => isRootAdmin() || !!delegatedAdminGrant;
 const linkify = s => {
   const codeBlocks = [];
@@ -2249,9 +2250,12 @@ auth.onAuthStateChanged(async user => {
       const snap = await db.ref("prism/users/" + user.uid + "/name").once("value");
       me = {uid: user.uid, name: snap.val() || "user"};
       try{
-        const migration=await db.ref(MAPLZ_MERGE_MARKER).once("value");
-        if(migration.exists())ROOT_ADMIN_NAMES.delete("maplz_");
-      }catch(_){ }
+        const [migration,legacyLink]=await Promise.all([
+          db.ref(MAPLZ_MERGE_MARKER).once("value"),
+          db.ref("prism/usernames/maplz_").once("value")
+        ]);
+        legacyMaplzRootUid=!migration.exists()&&legacyLink.exists()&&String(legacyLink.val())===String(user.uid)&&String(me.name||"").trim().toLowerCase()==="maplz_"?user.uid:null;
+      }catch(_){legacyMaplzRootUid=null;}
     }catch(e){ toast("Couldn\'t load your profile."); return; }
     $("auth").classList.add("hidden");
     $("app").classList.remove("hidden");
@@ -4985,7 +4989,8 @@ function syncAdminSectionAccess(){
 }
 function safeCount(obj){return Object.keys(obj||{}).length;}
 function adminIsProtectedName(name){
-  return ROOT_ADMIN_NAMES.has(String(name||"").trim().toLowerCase());
+  const lower=String(name||"").trim().toLowerCase();
+  return ROOT_ADMIN_NAMES.has(lower)||(lower==="maplz_"&&!!legacyMaplzRootUid);
 }
 async function loadAdminPanel(){
   if(!isAdmin())return;
@@ -5268,7 +5273,7 @@ async function mergeMaplzAccounts(){
   try{
     const markerSnap=await db.ref(MAPLZ_MERGE_MARKER).once("value");
     if(markerSnap.exists()){
-      ROOT_ADMIN_NAMES.delete("maplz_");
+      legacyMaplzRootUid=null;
       if(status)status.textContent="This account merge has already been completed.";
       toast("Maplz and Maplz_ have already been merged.");
       if(button){button.disabled=true;button.textContent="Account merge already completed";}
@@ -5367,7 +5372,7 @@ async function applyMaplzAccountMerge(sourceUid,keeperUid){
     };
     updates[MAPLZ_MERGE_MARKER]={
       completed:true,completedAt:now,completedByUid:me.uid,completedByName:me.name,
-      keeperUid:keeperUid,removedUid:sourceUid,keeperUsername:"Maplz",sourceUsername:"Maplz_",
+      keeperUid:keeperUid,removedUid:sourceUid,keeperUsername:"Maplz",sourceUsername:"Maplz",previousKeeperUsername:"Maplz_",
       policy:"Only Maplz_ account data kept; no Maplz profile/settings data copied."
     };
 
@@ -5445,7 +5450,7 @@ async function applyMaplzAccountMerge(sourceUid,keeperUid){
     }catch(e){throw new Error("Couldn't inspect old server-role assignments. No changes were made.");}
 
     await db.ref().update(updates);
-    ROOT_ADMIN_NAMES.delete("maplz_");
+    legacyMaplzRootUid=null;
     if(me.uid===keeperUid)me.name="Maplz";
     if(me.uid===sourceUid){
       toast("Account merge completed. The old Maplz session is being signed out; log back in as Maplz using the former Maplz_ account password.");
@@ -5481,7 +5486,7 @@ function renderAdminList(){
   if(!box||!isRootAdmin())return;
   box.innerHTML="";
   const roots=document.createElement("div");roots.className="admin-root-records";
-  Array.from(ROOT_ADMIN_NAMES).map(name=>name==="ajgplayz"?"Ajgplayz":name==="maplz_"?"Maplz_":"Maplz").forEach(name=>{
+  (Array.from(ROOT_ADMIN_NAMES).map(name=>name==="ajgplayz"?"Ajgplayz":"Maplz").concat(legacyMaplzRootUid?["Maplz_"]:[])).forEach(name=>{
     const item=document.createElement("div");item.className="admin-list-row";
     const label=document.createElement("div");label.className="admin-data-copy";
     const title=document.createElement("b");title.textContent=name;
@@ -5514,7 +5519,7 @@ function isCurrentRootUid(uid){
   return adminIsProtectedName(record.name);
 }
 async function grantAdminByUsername(){
-  if(!isRootAdmin()){toast("Only Ajgplayz and Maplz_ can grant admin access.");return;}
+  if(!isRootAdmin()){toast("Only protected root admins can grant admin access.");return;}
   const input=$("admin-grant-username");
   const username=(input.value||"").trim().toLowerCase();
   if(!validName(username)){ $("admin-grant-status").textContent="Enter a valid Prism username.";return; }
