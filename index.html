@@ -5329,7 +5329,7 @@ function revokeAdmin(uid,name){
 }
 $("admin-grant-button").onclick=grantAdminByUsername;
 $("admin-grant-username").addEventListener("keydown",event=>{if(event.key==="Enter")grantAdminByUsername();});
-$("admin-users-search").addEventListener("input",renderAdminUsers);
+$("admin-users-search").addEventListener("input",()=>{renderAdminUsers();renderDeletedAccounts();});
 $("admin-servers-search").addEventListener("input",renderAdminServers);
 
 let draftBanner = "";
