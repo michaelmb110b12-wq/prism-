@@ -85,7 +85,7 @@ const remoteShares = $("voice-remote-shares");
 const voiceStage=$("voice-stage"), callWindow=$("voice-window"), callTopbar=$("voice-topbar");
 const sideShareBody=$("voice-share-window-body"), sideShareEmpty=$("voice-share-empty");
 const localFullscreen=$("voice-local-fullscreen"), minimizeBtn=$("voice-minimize");
-const s = {room:null,session:null,stream:null,screenStream:null,cameraStream:null,joined:false,joining:false,muted:false,deafened:false,people:{},peopleReady:false,peers:new Map(),pr:null,ownRef:null,inbox:null,ph:null,ih:null,revision:0,directTarget:null,inviteStateRef:null,inviteStateHandler:null,minimized:false,ice:[{urls:"stun:stun.l.google.com:19302"}]};
+const s = {room:null,session:null,stream:null,screenStream:null,cameraStream:null,joined:false,joining:false,muted:true,deafened:false,people:{},peopleReady:false,peers:new Map(),pr:null,ownRef:null,inbox:null,ph:null,ih:null,revision:0,directTarget:null,inviteStateRef:null,inviteStateHandler:null,minimized:false,usingSyntheticAudio:false,silentAudioContext:null,silentOscillator:null,silentAudioGain:null,ice:[{urls:"stun:stun.l.google.com:19302"}]};
 let incomingCallsRef = null;
 const seenIncomingCalls = new Set();
 const callSoundLoops = Object.create(null);
@@ -337,8 +337,8 @@ async function requestMediaFullscreen(target){
 function refresh(){
  const canJoin=!!current()&&!s.directTarget;
  join.classList.toggle("hidden",!canJoin);join.disabled=s.joining;
- join.querySelector("span").textContent=s.joined?"Open Voice":s.joining?"Connecting...":"Join Voice";
- join.title=s.joined?"Open the voice call":"Join channel voice";
+ join.querySelector("span").textContent=s.joined?"Open Voice":s.joining?"Connecting...":"Join Muted";
+ join.title=s.joined?"Open the voice call":"Join channel voice muted without microphone access";
  const isDM = typeof view!=="undefined"&&view&&view.type==="dm";
  dmCall.classList.toggle("hidden",!isDM);
  dmCall.disabled=s.joining;
@@ -367,7 +367,7 @@ function render(){
   card.append(avatar,nm,sub);list.appendChild(card);
  });
  title.textContent=s.room?(s.directTarget?"Call with "+String(s.directTarget.name||"user"):"#"+s.room.name+" voice"):"Voice call";
- status.textContent=s.joining?"Connecting to microphone…":s.joined?"Connected · "+people.length+" participant"+(people.length===1?"":"s"):"Not connected";
+ status.textContent=s.joining?"Connecting to voice…":s.joined?(s.muted?"Connected · joined muted":"Connected · "+people.length+" participant"+(people.length===1?"":"s")):"Not connected";
  mute.classList.toggle("voice-muted",s.muted);mute.setAttribute("aria-label",s.muted?"Unmute microphone":"Mute microphone");mute.title=s.muted?"Unmute microphone":"Mute microphone";
  deafen.classList.toggle("voice-muted",s.deafened);deafen.setAttribute("aria-label",s.deafened?"Unmute incoming audio":"Mute incoming audio");deafen.title=s.deafened?"Unmute incoming audio":"Mute incoming audio";
  shareBtn.classList.toggle("voice-active",!!s.screenStream);shareBtn.setAttribute("aria-label",s.screenStream?"Stop sharing screen":"Share screen");shareBtn.title=s.screenStream?"Stop sharing screen":"Share screen";
