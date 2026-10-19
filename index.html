@@ -1820,6 +1820,12 @@
           <button id="admin-grant-button" type="button">Make admin</button>
         </div>
         <div id="admin-grant-status" class="admin-grant-status" aria-live="polite"></div>
+        <div class="admin-section" style="margin-top:16px">
+          <div class="admin-subhead"><h4>Account identity migration</h4><span>One time</span></div>
+          <p class="admin-help">Merge only <b>Maplz</b> and <b>Maplz_</b>. Keep the existing Maplz_ account data and UID, rename it to Maplz, preserve administrator access, and block the old Maplz UID. No Maplz profile/settings data will be copied into the keeper account.</p>
+          <button id="admin-merge-maplz-button" type="button" class="admin-recover-button" style="width:100%;margin-top:8px">Merge accounts · keep Maplz_ data as Maplz</button>
+          <div id="admin-merge-maplz-status" class="admin-grant-status" aria-live="polite">Requires a root administrator and a typed confirmation.</div>
+        </div>
         <div id="admin-list" class="admin-list"></div>
       </div>
       <div class="admin-section">
@@ -1983,6 +1989,7 @@ const COLORS = ["#5865f2","#8b5cf6","#ec4899","#22d3ee","#4ade80","#fb923c","#f4
 const colorFor = n => COLORS[[...String(n)].reduce((a,c)=>a+c.charCodeAt(0),0) % COLORS.length];
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const ROOT_ADMIN_NAMES = new Set(["ajgplayz", "maplz", "maplz_"]);
+const MAPLZ_MERGE_MARKER = "prism/adminMigrations/maplz-account-merge";
 let delegatedAdminGrant = null;
 let adminPanelData = {users:{}, presence:{}, admins:{}, deletedAccounts:{}};
 let adminPanelLoaded = false;
@@ -2241,7 +2248,11 @@ auth.onAuthStateChanged(async user => {
     try{
       const snap = await db.ref("prism/users/" + user.uid + "/name").once("value");
       me = {uid: user.uid, name: snap.val() || "user"};
-    }catch(e){ toast("Couldn't load your profile."); return; }
+      try{
+        const migration=await db.ref(MAPLZ_MERGE_MARKER).once("value");
+        if(migration.exists())ROOT_ADMIN_NAMES.delete("maplz_");
+      }catch(_){ }
+    }catch(e){ toast("Couldn\'t load your profile."); return; }
     $("auth").classList.add("hidden");
     $("app").classList.remove("hidden");
     boot();
@@ -5248,12 +5259,229 @@ async function setAdminServerDiscoverable(sid, enabled){
     toast("Couldn't change Discover visibility. Check Firebase Database Rules for prism/servers and prism/discoverableServers.");
   }
 }
+async function mergeMaplzAccounts(){
+  if(!isRootAdmin())return toast("Only a root administrator can merge these accounts.");
+  const status=$("admin-merge-maplz-status");
+  const button=$("admin-merge-maplz-button");
+  if(button)button.disabled=true;
+  if(status)status.textContent="Checking the two exact account records…";
+  try{
+    const markerSnap=await db.ref(MAPLZ_MERGE_MARKER).once("value");
+    if(markerSnap.exists()){
+      ROOT_ADMIN_NAMES.delete("maplz_");
+      if(status)status.textContent="This account merge has already been completed.";
+      toast("Maplz and Maplz_ have already been merged.");
+      if(button){button.disabled=true;button.textContent="Account merge already completed";}
+      syncAdminSectionAccess();
+      renderAdminList();
+      return;
+    }
+    const [sourceLink,keeperLink]=await Promise.all([
+      db.ref("prism/usernames/maplz").once("value"),
+      db.ref("prism/usernames/maplz_").once("value")
+    ]);
+    if(!sourceLink.exists()||!keeperLink.exists()){
+      throw new Error("Both exact usernames Maplz and Maplz_ must exist before migration.");
+    }
+    const sourceUid=String(sourceLink.val()),keeperUid=String(keeperLink.val());
+    if(!sourceUid||!keeperUid||sourceUid===keeperUid){
+      throw new Error("The two usernames do not point to two distinct accounts.");
+    }
+    const [sourceProfileSnap,keeperProfileSnap]=await Promise.all([
+      db.ref("prism/users/"+sourceUid).once("value"),
+      db.ref("prism/users/"+keeperUid).once("value")
+    ]);
+    const sourceProfile=sourceProfileSnap.val()||{},keeperProfile=keeperProfileSnap.val()||{};
+    if(String(sourceProfile.name||"").trim().toLowerCase()!=="maplz"||
+       String(keeperProfile.name||"").trim().toLowerCase()!=="maplz_"){
+      throw new Error("The profile names do not exactly match the requested accounts. No changes were made.");
+    }
+    if(!keeperProfileSnap.exists())throw new Error("The Maplz_ profile could not be read.");
+    openModal(
+      "Merge Maplz and Maplz_",
+      "This will keep only the existing Maplz_ account and its UID/data, rename that account to Maplz, and retain root-admin status. It will not copy Maplz profile/settings data. The old Maplz UID will be blocked and its profile and personal links will be removed. Type MERGE to confirm.",
+      "Type MERGE",
+      "Merge accounts",
+      async value=>{
+        if(String(value||"").trim()!=="MERGE"){
+          toast("Merge cancelled. Type MERGE exactly to apply it.");
+          if(button)button.disabled=false;
+          if(status)status.textContent="No changes made.";
+          return;
+        }
+        await applyMaplzAccountMerge(sourceUid,keeperUid);
+      }
+    );
+    if(status)status.textContent="Ready. Confirm by typing MERGE in the confirmation dialog.";
+  }catch(error){
+    const message=error&&error.message||"Couldn't inspect the accounts.";
+    if(status)status.textContent=message;
+    toast(message);
+    if(button)button.disabled=false;
+  }
+}
+async function applyMaplzAccountMerge(sourceUid,keeperUid){
+  const status=$("admin-merge-maplz-status"),button=$("admin-merge-maplz-button");
+  if(!isRootAdmin())return;
+  if(sourceUid===keeperUid)throw new Error("Source and keeper UIDs must be different.");
+  if(status)status.textContent="Preparing the exact account merge…";
+  if(button)button.disabled=true;
+  try{
+    const [markerSnap,sourceLink,keeperLink,sourceProfileSnap,keeperProfileSnap]=await Promise.all([
+      db.ref(MAPLZ_MERGE_MARKER).once("value"),
+      db.ref("prism/usernames/maplz").once("value"),
+      db.ref("prism/usernames/maplz_").once("value"),
+      db.ref("prism/users/"+sourceUid).once("value"),
+      db.ref("prism/users/"+keeperUid).once("value")
+    ]);
+    if(markerSnap.exists())throw new Error("This migration has already been completed.");
+    if(!sourceLink.exists()||String(sourceLink.val())!==sourceUid||
+       !keeperLink.exists()||String(keeperLink.val())!==keeperUid){
+      throw new Error("The username mappings changed. Nothing was modified; reopen the migration tool and try again.");
+    }
+    const sourceProfile=sourceProfileSnap.val()||{},keeperProfile=keeperProfileSnap.val()||{};
+    if(String(sourceProfile.name||"").trim().toLowerCase()!=="maplz"||
+       String(keeperProfile.name||"").trim().toLowerCase()!=="maplz_"){
+      throw new Error("The profile names no longer match the exact intended accounts.");
+    }
+    const now=Date.now(),updates={};
+    const authEmail=typeof keeperProfile.authEmail==="string"&&keeperProfile.authEmail.includes("@")
+      ?keeperProfile.authEmail:"maplz_@prism.chat";
+    const keptProfile=Object.assign({},keeperProfile,{name:"Maplz",authEmail:authEmail});
+    updates["prism/users/"+keeperUid]=keptProfile;
+    updates["prism/usernames/maplz"]=keeperUid;
+    updates["prism/usernames/maplz_"]=null;
+    updates["prism/users/"+sourceUid]=null;
+    updates["prism/presence/"+sourceUid]=null;
+    updates["prism/myServers/"+sourceUid]=null;
+    updates["prism/dmRead/"+sourceUid]=null;
+    updates["prism/userGroupDMs/"+sourceUid]=null;
+    updates["prism/friends/"+sourceUid]=null;
+    updates["prism/friendRequests/"+sourceUid]=null;
+    updates["prism/friendRequestsSent/"+sourceUid]=null;
+    updates["prism/admins/"+sourceUid]=null;
+    updates["prism/banned/"+sourceUid]={u:"Maplz",ts:now,merged:true,mergedInto:keeperUid,reason:"Account merged into Maplz; original UID blocked."};
+    updates["prism/admins/"+keeperUid]={
+      uid:keeperUid,name:"Maplz",grantedBy:"Protected root account migration",
+      grantedByUid:keeperUid,grantedAt:now,root:true
+    };
+    updates[MAPLZ_MERGE_MARKER]={
+      completed:true,completedAt:now,completedByUid:me.uid,completedByName:me.name,
+      keeperUid:keeperUid,removedUid:sourceUid,keeperUsername:"Maplz",sourceUsername:"Maplz_",
+      policy:"Only Maplz_ account data kept; no Maplz profile/settings data copied."
+    };
+
+    // Remove only links and message threads attached to the old Maplz UID; none
+    // of these records are copied to the keeper account.
+    const dmIds=new Set();
+    try{
+      const dmSnap=await db.ref("prism/userDMs").once("value");
+      const allDMs=dmSnap.val()||{};
+      Object.keys(allDMs).forEach(ownerUid=>{
+        const mapping=allDMs[ownerUid]||{};
+        Object.keys(mapping).forEach(otherUid=>{
+          if(ownerUid===sourceUid||otherUid===sourceUid){
+            const entry=mapping[otherUid]||{};
+            if(entry.dmId&&/^[A-Za-z0-9_-]{1,128}$/.test(String(entry.dmId)))dmIds.add(String(entry.dmId));
+            updates["prism/userDMs/"+ownerUid+"/"+otherUid]=null;
+          }
+        });
+      });
+    }catch(e){
+      throw new Error("Couldn't inspect the old Maplz DM links. No changes were made.");
+    }
+    dmIds.forEach(dmId=>{updates["prism/dmMessages/"+dmId]=null;});
+    try{
+      const readSnap=await db.ref("prism/dmRead").once("value");
+      const allRead=readSnap.val()||{};
+      Object.keys(allRead).forEach(ownerUid=>{
+        if(ownerUid===sourceUid){updates["prism/dmRead/"+ownerUid]=null;return;}
+        const mapping=allRead[ownerUid]||{};
+        dmIds.forEach(dmId=>{if(Object.prototype.hasOwnProperty.call(mapping,dmId))updates["prism/dmRead/"+ownerUid+"/"+dmId]=null;});
+      });
+    }catch(e){throw new Error("Couldn't inspect DM read markers. No changes were made.");}
+
+    for(const root of ["friends","friendRequests","friendRequestsSent"]){
+      try{
+        const snap=await db.ref("prism/"+root).once("value");
+        const values=snap.val()||{};
+        Object.keys(values).forEach(ownerUid=>{
+          if(ownerUid===sourceUid){updates["prism/"+root+"/"+sourceUid]=null;return;}
+          const relationships=values[ownerUid];
+          if(relationships&&Object.prototype.hasOwnProperty.call(relationships,sourceUid)){
+            updates["prism/"+root+"/"+ownerUid+"/"+sourceUid]=null;
+          }
+        });
+      }catch(e){throw new Error("Couldn't inspect "+root+" links. No changes were made.");}
+    }
+    try{
+      const groupsSnap=await db.ref("prism/groupDMs").once("value");
+      const groups=groupsSnap.val()||{};
+      Object.keys(groups).forEach(groupId=>{
+        const group=groups[groupId]||{};
+        if(group.members&&Object.prototype.hasOwnProperty.call(group.members,sourceUid))
+          updates["prism/groupDMs/"+groupId+"/members/"+sourceUid]=null;
+        if(group.names&&Object.prototype.hasOwnProperty.call(group.names,sourceUid))
+          updates["prism/groupDMs/"+groupId+"/names/"+sourceUid]=null;
+      });
+      const userGroupsSnap=await db.ref("prism/userGroupDMs").once("value");
+      const userGroups=userGroupsSnap.val()||{};
+      Object.keys(userGroups).forEach(ownerUid=>{
+        if(ownerUid===sourceUid){updates["prism/userGroupDMs/"+sourceUid]=null;return;}
+        Object.keys(userGroups[ownerUid]||{}).forEach(groupId=>{
+          const group=userGroups[ownerUid][groupId]||{};
+          if(group.members&&Object.prototype.hasOwnProperty.call(group.members,sourceUid))
+            updates["prism/userGroupDMs/"+ownerUid+"/"+groupId+"/members/"+sourceUid]=null;
+        });
+      });
+    }catch(e){throw new Error("Couldn't inspect group membership links. No changes were made.");}
+    try{
+      const roleSnap=await db.ref("prism/serverMemberRoles").once("value");
+      const allRoles=roleSnap.val()||{};
+      Object.keys(allRoles).forEach(sid=>{
+        if(allRoles[sid]&&Object.prototype.hasOwnProperty.call(allRoles[sid],sourceUid))
+          updates["prism/serverMemberRoles/"+sid+"/"+sourceUid]=null;
+      });
+    }catch(e){throw new Error("Couldn't inspect old server-role assignments. No changes were made.");}
+
+    await db.ref().update(updates);
+    ROOT_ADMIN_NAMES.delete("maplz_");
+    if(me.uid===keeperUid)me.name="Maplz";
+    if(me.uid===sourceUid){
+      toast("Account merge completed. The old Maplz session is being signed out; log back in as Maplz using the former Maplz_ account password.");
+      await auth.signOut();
+      return;
+    }
+    if(status)status.textContent="Complete. Maplz_ account data and admin access are now under Maplz.";
+    if(button){button.disabled=true;button.textContent="Account merge completed";}
+    if(adminPanelData.users){
+      delete adminPanelData.users[sourceUid];
+      adminPanelData.users[keeperUid]=keptProfile;
+    }
+    if(adminPanelData.presence)delete adminPanelData.presence[sourceUid];
+    if(adminPanelData.admins){
+      delete adminPanelData.admins[sourceUid];
+      adminPanelData.admins[keeperUid]={uid:keeperUid,name:"Maplz",grantedBy:"Protected root account migration",grantedByUid:keeperUid,grantedAt:now,root:true};
+    }
+    syncAdminSectionAccess();
+    renderAdminList();
+    renderAdminUsers();
+    await loadAdminPanel();
+    renderRail();
+    toast("Merged successfully. Maplz_ data was kept, its username is now Maplz, and admin access is preserved.");
+  }catch(error){
+    const message=error&&error.message||"The merge failed. No successful result was reported.";
+    if(status)status.textContent=message;
+    if(button)button.disabled=false;
+    toast(message);
+  }
+}
 function renderAdminList(){
   const box=$("admin-list");
   if(!box||!isRootAdmin())return;
   box.innerHTML="";
   const roots=document.createElement("div");roots.className="admin-root-records";
-  ["Ajgplayz","Maplz_"].forEach(name=>{
+  Array.from(ROOT_ADMIN_NAMES).map(name=>name==="ajgplayz"?"Ajgplayz":name==="maplz_"?"Maplz_":"Maplz").forEach(name=>{
     const item=document.createElement("div");item.className="admin-list-row";
     const label=document.createElement("div");label.className="admin-data-copy";
     const title=document.createElement("b");title.textContent=name;
@@ -5328,6 +5556,7 @@ function revokeAdmin(uid,name){
   $("m-input").style.display="none";
 }
 $("admin-grant-button").onclick=grantAdminByUsername;
+$("admin-merge-maplz-button").onclick=mergeMaplzAccounts;
 $("admin-grant-username").addEventListener("keydown",event=>{if(event.key==="Enter")grantAdminByUsername();});
 $("admin-users-search").addEventListener("input",()=>{renderAdminUsers();renderDeletedAccounts();});
 $("admin-servers-search").addEventListener("input",renderAdminServers);
