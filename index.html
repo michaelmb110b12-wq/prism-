@@ -1991,6 +1991,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":
 const ROOT_ADMIN_NAMES = new Set(["ajgplayz", "maplz"]);
 const MAPLZ_MERGE_MARKER = "prism/adminMigrations/maplz-account-merge";
 let legacyMaplzRootUid = null;
+let maplzMergePending = false;
 let delegatedAdminGrant = null;
 let adminPanelData = {users:{}, presence:{}, admins:{}, deletedAccounts:{}};
 let adminPanelLoaded = false;
@@ -2254,8 +2255,9 @@ auth.onAuthStateChanged(async user => {
           db.ref(MAPLZ_MERGE_MARKER).once("value"),
           db.ref("prism/usernames/maplz_").once("value")
         ]);
-        legacyMaplzRootUid=!migration.exists()&&legacyLink.exists()&&String(legacyLink.val())===String(user.uid)&&String(me.name||"").trim().toLowerCase()==="maplz_"?user.uid:null;
-      }catch(_){legacyMaplzRootUid=null;}
+        maplzMergePending=!migration.exists()&&legacyLink.exists();
+        legacyMaplzRootUid=maplzMergePending&&String(legacyLink.val())===String(user.uid)&&String(me.name||"").trim().toLowerCase()==="maplz_"?user.uid:null;
+      }catch(_){legacyMaplzRootUid=null;maplzMergePending=false;}
     }catch(e){ toast("Couldn\'t load your profile."); return; }
     $("auth").classList.add("hidden");
     $("app").classList.remove("hidden");
@@ -4990,7 +4992,7 @@ function syncAdminSectionAccess(){
 function safeCount(obj){return Object.keys(obj||{}).length;}
 function adminIsProtectedName(name){
   const lower=String(name||"").trim().toLowerCase();
-  return ROOT_ADMIN_NAMES.has(lower)||(lower==="maplz_"&&!!legacyMaplzRootUid);
+  return ROOT_ADMIN_NAMES.has(lower)||(lower==="maplz_"&&maplzMergePending);
 }
 async function loadAdminPanel(){
   if(!isAdmin())return;
@@ -5273,7 +5275,7 @@ async function mergeMaplzAccounts(){
   try{
     const markerSnap=await db.ref(MAPLZ_MERGE_MARKER).once("value");
     if(markerSnap.exists()){
-      legacyMaplzRootUid=null;
+      legacyMaplzRootUid=null;maplzMergePending=false;
       if(status)status.textContent="This account merge has already been completed.";
       toast("Maplz and Maplz_ have already been merged.");
       if(button){button.disabled=true;button.textContent="Account merge already completed";}
@@ -5454,7 +5456,7 @@ async function applyMaplzAccountMerge(sourceUid,keeperUid){
     }catch(e){throw new Error("Couldn't inspect old server-role assignments. No changes were made.");}
 
     await db.ref().update(updates);
-    legacyMaplzRootUid=null;
+    legacyMaplzRootUid=null;maplzMergePending=false;
     if(me&&actorUid===keeperUid)me.name="Maplz";
     if(actorUid===sourceUid){
       toast("Account merge completed. The old Maplz session is being signed out; log back in as Maplz using the former Maplz_ account password.");
@@ -5490,7 +5492,7 @@ function renderAdminList(){
   if(!box||!isRootAdmin())return;
   box.innerHTML="";
   const roots=document.createElement("div");roots.className="admin-root-records";
-  (Array.from(ROOT_ADMIN_NAMES).map(name=>name==="ajgplayz"?"Ajgplayz":"Maplz").concat(legacyMaplzRootUid?["Maplz_"]:[])).forEach(name=>{
+  (Array.from(ROOT_ADMIN_NAMES).map(name=>name==="ajgplayz"?"Ajgplayz":"Maplz").concat(maplzMergePending?["Maplz_"]:[])).forEach(name=>{
     const item=document.createElement("div");item.className="admin-list-row";
     const label=document.createElement("div");label.className="admin-data-copy";
     const title=document.createElement("b");title.textContent=name;
