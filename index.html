@@ -1986,6 +1986,7 @@ const ROOT_ADMIN_NAMES = new Set(["ajgplayz", "maplz", "maplz_"]);
 let delegatedAdminGrant = null;
 let adminPanelData = {users:{}, presence:{}, admins:{}, deletedAccounts:{}};
 let adminPanelLoaded = false;
+let adminDeletedAccountsUnavailable=false;
 const isRootAdmin = () => !!(me && ROOT_ADMIN_NAMES.has(String(me.name || "").trim().toLowerCase()));
 const isAdmin = () => isRootAdmin() || !!delegatedAdminGrant;
 const linkify = s => {
@@ -3750,7 +3751,7 @@ async function deleteUser(uid, uname, delayMs){
     Object.keys(allRead).forEach(ouid=>{
       const mapping=allRead[ouid]||{};
       Object.keys(mapping).forEach(dmId=>{
-        if(ouid===uid||dmIds.has(dmId))paths.push("prism/dmRead/"+ouid+"/"+dmId);
+        if(ouid!==uid&&dmIds.has(dmId))paths.push("prism/dmRead/"+ouid+"/"+dmId);
       });
     });
   }catch(e){
@@ -4994,9 +4995,11 @@ async function loadAdminPanel(){
     try{
       const deletedSnap=await db.ref("prism/deletedAccounts").once("value");
       adminPanelData.deletedAccounts=deletedSnap.val()||{};
+      adminDeletedAccountsUnavailable=false;
       await purgeExpiredDeletedAccounts(adminPanelData.deletedAccounts);
     }catch(deletedError){
       adminPanelData.deletedAccounts={};
+      adminDeletedAccountsUnavailable=true;
       $("admin-deleted-list").innerHTML='<div class="admin-loading">Deleted-account data is unavailable. Firebase rules may need to allow authorized admins to read and write prism/deletedAccounts.</div>';
     }
     const now=Date.now();
@@ -5093,7 +5096,7 @@ function confirmPermanentlyDeleteDeletedAccount(uid){
 }
 function renderDeletedAccounts(){
   const box=$("admin-deleted-list");
-  if(!box)return;
+  if(!box||adminDeletedAccountsUnavailable)return;
   box.innerHTML="";
   const query=($("admin-users-search").value||"").trim().toLowerCase();
   const records=Object.entries(adminPanelData.deletedAccounts||{}).map(([uid,data])=>({
