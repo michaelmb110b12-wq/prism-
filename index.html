@@ -1433,6 +1433,27 @@
   #chedit:hover { background:var(--hover); color:var(--text); }
   #chedit.hidden { display:none!important; }
 </style>
+<style id="prism-chat-media-account-recovery-css">
+  #media-pending{display:flex;flex-wrap:wrap;gap:7px;padding:8px 12px;border-bottom:1px solid color-mix(in srgb,var(--text) 8%,transparent)}
+  #media-pending.hidden{display:none}
+  .pending-media-item{display:flex;align-items:center;gap:8px;max-width:100%;padding:6px 9px;border:1px solid color-mix(in srgb,var(--text) 13%,transparent);border-radius:8px;background:var(--side);font-size:11px;min-width:0}
+  .pending-media-name{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pending-media-remove{border:0;background:transparent;color:var(--dim);cursor:pointer;font-size:15px;line-height:1}
+  .message-media-list{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+  .message-media{max-width:min(520px,100%);width:max-content}
+  .message-media img,.message-media video{display:block;max-width:min(520px,100%);max-height:360px;border-radius:9px;object-fit:contain;background:#111}
+  .message-media audio{display:block;width:min(440px,100%);max-width:100%}
+  .message-media a{display:inline-flex;flex-direction:column;gap:4px;color:var(--accent);font-size:11px;overflow-wrap:anywhere}
+  .message-media .media-download{color:var(--dim);font-size:10px;text-decoration:none}
+  .admin-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+  .admin-row-actions button{flex-shrink:0}
+  .admin-recover-button{padding:7px 10px;border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);border-radius:7px;background:color-mix(in srgb,var(--accent) 15%,var(--side));color:var(--text);font-size:11px;cursor:pointer}
+  .admin-recover-button:hover{background:color-mix(in srgb,var(--accent) 24%,var(--side))}
+  .admin-purge-button{padding:7px 10px;border:1px solid color-mix(in srgb,#ed4245 35%,transparent);border-radius:7px;background:transparent;color:#ed7379;font-size:11px;cursor:pointer}
+  .admin-purge-button:hover{background:rgba(237,66,69,.1)}
+  .deleted-account-date{white-space:normal!important;line-height:1.45}
+  @media(max-width:600px){.pending-media-name{max-width:145px}.message-media img,.message-media video{max-height:260px}.admin-row-actions{width:100%;justify-content:flex-start;margin-top:8px}}
+</style>
 </head>
 <body>
 <script>
@@ -1669,7 +1690,10 @@
         <button type="button" data-format="codeblock" title="Code block" aria-label="Code block">▤</button>
         <button type="button" data-format="quote" title="Quote" aria-label="Quote">❞</button>
         <button type="button" data-format="link" title="Insert link" aria-label="Insert link">↗</button>
+        <button type="button" id="attach-media-button" title="Upload images, videos, or audio" aria-label="Upload images, videos, or audio">📎</button>
+        <input id="chat-media-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif,video/mp4,video/webm,video/ogg,video/quicktime,audio/*" multiple style="display:none">
       </div>
+      <div id="media-pending" class="hidden" aria-live="polite"></div>
       <div id="mention-suggestions" class="hidden" role="listbox" aria-label="Mention suggestions"></div>
       <textarea id="minput" rows="1" placeholder="Message" aria-autocomplete="list" aria-controls="mention-suggestions"></textarea>
     </div></div>
@@ -1802,6 +1826,11 @@
         <div class="admin-subhead"><h4>Users</h4><span id="admin-users-label">Account moderation</span></div>
         <input id="admin-users-search" class="admin-search" type="search" placeholder="Search usernames" autocomplete="off" aria-label="Search users">
         <div id="admin-users-list" class="admin-data-list"><div class="admin-loading">Open the panel to load accounts.</div></div>
+      </div>
+      <div class="admin-section" id="admin-deleted-section">
+        <div class="admin-subhead"><h4>Deleted accounts</h4><span id="admin-deleted-label">Recoverable accounts</span></div>
+        <p class="admin-help">Deleted accounts can be recovered before the selected cleanup deadline. Their usernames are released immediately, so recovery is unavailable after someone else claims the same username.</p>
+        <div id="admin-deleted-list" class="admin-data-list"><div class="admin-loading">Open the panel to load deleted accounts.</div></div>
       </div>
       <div class="admin-section">
         <div class="admin-subhead"><h4>Servers</h4><span id="admin-servers-label">Server moderation</span></div>
@@ -1955,8 +1984,9 @@ const colorFor = n => COLORS[[...String(n)].reduce((a,c)=>a+c.charCodeAt(0),0) %
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const ROOT_ADMIN_NAMES = new Set(["ajgplayz", "maplz", "maplz_"]);
 let delegatedAdminGrant = null;
-let adminPanelData = {users:{}, presence:{}, admins:{}};
+let adminPanelData = {users:{}, presence:{}, admins:{}, deletedAccounts:{}};
 let adminPanelLoaded = false;
+let adminDeletedAccountsUnavailable=false;
 const isRootAdmin = () => !!(me && ROOT_ADMIN_NAMES.has(String(me.name || "").trim().toLowerCase()));
 const isAdmin = () => isRootAdmin() || !!delegatedAdminGrant;
 const linkify = s => {
@@ -2152,8 +2182,18 @@ async function doLogin(){
   if(!validName(name)){ $("li-err").textContent = "Enter your username."; return; }
   if(!pw){ $("li-err").textContent = "Enter your password."; return; }
   $("li-go").disabled = true;
-  try{ await auth.signInWithEmailAndPassword(emailOf(name), pw); }
-  catch(e){ $("li-err").textContent = friendlyAuth(e); $("li-go").disabled = false; }
+  try{
+    let loginEmail=emailOf(name);
+    try{
+      const userLink=await db.ref("prism/usernames/"+name).once("value");
+      if(userLink.exists()){
+        const profile=await db.ref("prism/users/"+userLink.val()).once("value");
+        const saved=profile.val()&&profile.val().authEmail;
+        if(typeof saved==="string"&&saved.includes("@"))loginEmail=saved;
+      }
+    }catch(_){}
+    await auth.signInWithEmailAndPassword(loginEmail, pw);
+  }catch(e){ $("li-err").textContent = friendlyAuth(e); $("li-go").disabled = false; }
 }
 $("su-go").onclick = doSignup;
 $("su-pw").addEventListener("keydown", e => { if(e.key === "Enter") doSignup(); });
@@ -2167,9 +2207,19 @@ async function doSignup(){
     const lower = name.toLowerCase();
     const taken = await db.ref("prism/usernames/" + lower).once("value");
     if(taken.exists()){ $("su-err").textContent = "That username is taken."; $("su-go").disabled = false; return; }
-    const cred = await auth.createUserWithEmailAndPassword(emailOf(lower), pw);
+    let accountEmail=emailOf(lower),cred;
+    try{
+      cred=await auth.createUserWithEmailAndPassword(accountEmail,pw);
+    }catch(createError){
+      if(!createError||createError.code!=="auth/email-already-in-use")throw createError;
+      // A deleted account may still exist in Firebase Authentication because this
+      // static client cannot use the privileged Firebase Admin SDK to remove Auth users.
+      // Reuse the freed Prism username with a unique internal auth address.
+      accountEmail=lower+"."+Date.now().toString(36)+"."+Math.random().toString(36).slice(2,9)+"@prism.chat";
+      cred=await auth.createUserWithEmailAndPassword(accountEmail,pw);
+    }
     const uid = cred.user.uid;
-    await db.ref("prism/users/" + uid).set({name: name, createdAt: TS});
+    await db.ref("prism/users/" + uid).set({name: name, createdAt: TS, authEmail:accountEmail});
     await db.ref("prism/usernames/" + lower).set(uid);
   }catch(e){ $("su-err").textContent = friendlyAuth(e); $("su-go").disabled = false; }
 }
@@ -3646,60 +3696,112 @@ function openForumPost(pid){
 }
 
 /* ---------------- admin (ajgplayz) ---------------- */
+let selectedDeleteDelayMs=14*24*60*60*1000;
+const ACCOUNT_DELETE_DELAYS=[
+  {value:12*60*60*1000,label:"12 hours"},
+  {value:24*60*60*1000,label:"24 hours"},
+  {value:14*24*60*60*1000,label:"2 weeks"},
+  {value:30*24*60*60*1000,label:"1 month"}
+];
 function confirmDeleteUser(uid, uname){
   if(!isAdmin() || uid === me.uid || adminIsProtectedName(uname)) return;
+  selectedDeleteDelayMs=14*24*60*60*1000;
   openModal("Delete user",
-    "Really delete @" + uname + "? Their account, username, memberships and DMs will be removed and they won't be able to log back in. This can't be undone.",
-    "", "Delete", () => deleteUser(uid, uname));
+    "Remove @" + uname + " from active Prism access? Their data is archived for recovery and their username is released immediately. The selected cleanup deadline controls when their archived Prism data is permanently erased.",
+    "", "Delete account", () => deleteUser(uid, uname, selectedDeleteDelayMs));
   $("m-input").style.display = "none";
+  const old=$("delete-account-delay-wrap");if(old)old.remove();
+  const wrap=document.createElement("label");
+  wrap.id="delete-account-delay-wrap";
+  wrap.textContent="Permanently delete archived data after";
+  wrap.style.cssText="display:block;margin-top:12px;font-size:12px;font-weight:650";
+  const select=document.createElement("select");
+  select.id="delete-account-delay";
+  select.style.cssText="display:block;width:100%;box-sizing:border-box;margin-top:6px;padding:9px 10px;border-radius:7px;border:1px solid color-mix(in srgb,var(--text) 15%,transparent);background:var(--input);color:var(--text)";
+  ACCOUNT_DELETE_DELAYS.forEach(option=>{
+    const node=document.createElement("option");node.value=String(option.value);node.textContent=option.label;
+    if(option.value===selectedDeleteDelayMs)node.selected=true;
+    select.appendChild(node);
+  });
+  select.onchange=()=>{selectedDeleteDelayMs=Number(select.value)||14*24*60*60*1000;};
+  wrap.appendChild(select);
+  $("m-input").insertAdjacentElement("afterend",wrap);
 }
-async function deleteUser(uid, uname){
+async function deleteUser(uid, uname, delayMs){
   if(!isAdmin() || uid === me.uid || adminIsProtectedName(uname)) return;
+  const username=String(uname||"").trim(),lower=username.toLowerCase(),now=Date.now();
+  const allowedDelays=ACCOUNT_DELETE_DELAYS.map(option=>option.value);
+  const retention=allowedDelays.includes(Number(delayMs))?Number(delayMs):14*24*60*60*1000;
+  const paths=[];
+  const dmIds=new Set();
   try{
-    await db.ref("prism/banned/" + uid).set({u: uname, ts: Date.now()});
-  }catch(e){
-    toast("Couldn't ban the user.");
-    return;
-  }
-  const paths = [];
-  try{
-    const dmIds = new Set();
-    const dmSnap = await db.ref("prism/userDMs").once("value");
-    const allDMs = dmSnap.val() || {};
-    Object.keys(allDMs).forEach(ouid => {
-      const m = allDMs[ouid] || {};
-      Object.keys(m).forEach(other => {
-        if(other === uid || ouid === uid){
-          if(m[other] && m[other].dmId) dmIds.add(m[other].dmId);
-          paths.push("prism/userDMs/" + ouid + "/" + other);
+    const dmSnap=await db.ref("prism/userDMs").once("value");
+    const allDMs=dmSnap.val()||{};
+    Object.keys(allDMs).forEach(ouid=>{
+      const mapping=allDMs[ouid]||{};
+      Object.keys(mapping).forEach(other=>{
+        if(other===uid||ouid===uid){
+          if(mapping[other]&&mapping[other].dmId)dmIds.add(String(mapping[other].dmId));
+          paths.push("prism/userDMs/"+ouid+"/"+other);
         }
       });
     });
-    try{
-      const readSnap = await db.ref("prism/dmRead").once("value");
-      const allRead = readSnap.val() || {};
-      Object.keys(allRead).forEach(ouid => {
-        const m = allRead[ouid] || {};
-        Object.keys(m).forEach(dmId => {
-          if(dmIds.has(dmId)) paths.push("prism/dmRead/" + ouid + "/" + dmId);
-        });
+    const readSnap=await db.ref("prism/dmRead").once("value");
+    const allRead=readSnap.val()||{};
+    Object.keys(allRead).forEach(ouid=>{
+      const mapping=allRead[ouid]||{};
+      Object.keys(mapping).forEach(dmId=>{
+        if(ouid!==uid&&dmIds.has(dmId))paths.push("prism/dmRead/"+ouid+"/"+dmId);
       });
-    }catch(e){}
-    dmIds.forEach(id => paths.push("prism/dmMessages/" + id));
-  }catch(e){}
+    });
+  }catch(e){
+    toast("Couldn't prepare the account recovery archive. Check Firebase read rules.");
+    return;
+  }
   paths.push(
-    "prism/users/" + uid,
-    "prism/admins/" + uid,
-    "prism/usernames/" + String(uname).toLowerCase(),
-    "prism/presence/" + uid,
-    "prism/myServers/" + uid,
-    "prism/dmRead/" + uid
+    "prism/users/"+uid,
+    "prism/admins/"+uid,
+    "prism/usernames/"+lower,
+    "prism/presence/"+uid,
+    "prism/myServers/"+uid,
+    "prism/dmRead/"+uid
   );
-  let failed = 0;
-  await Promise.all(paths.map(p => db.ref(p).remove().catch(() => { failed++; })));
-  if(failed > 0) toast("User banned, but " + failed + " item(s) couldn't be removed (check database rules).");
-  else toast("User deleted.");
+  const uniquePaths=Array.from(new Set(paths)).filter(path=>!path.startsWith("prism/dmMessages/"));
+  let restoreData=[];
+  try{
+    const saved=await Promise.all(uniquePaths.map(async path=>{
+      const snap=await db.ref(path).once("value");
+      return snap.exists()?{path,value:snap.val()}:null;
+    }));
+    restoreData=saved.filter(Boolean);
+  }catch(e){
+    toast("Couldn't save recovery data. No changes were made; check Firebase read rules.");
+    return;
+  }
+  const profileEntry=restoreData.find(entry=>entry.path==="prism/users/"+uid);
+  const deleteAt=now+retention;
+  const archive={
+    uid,username,deletedAt:now,deleteAt,deleteAfterMs:retention,
+    dmIds:Array.from(dmIds),profile:profileEntry?profileEntry.value:null,restoreData
+  };
+  try{
+    const updates={};
+    updates["prism/deletedAccounts/"+uid]=archive;
+    updates["prism/banned/"+uid]={u:username,ts:now,deletedAccount:true,deleteAt};
+    await db.ref().update(updates);
+  }catch(e){
+    toast("Couldn't create a recoverable deletion. Check Firebase Database Rules.");
+    return;
+  }
+  let failed=0;
+  await Promise.all(uniquePaths.map(path=>db.ref(path).remove().catch(()=>{failed++;})));
+  adminPanelData.deletedAccounts=adminPanelData.deletedAccounts||{};
+  adminPanelData.deletedAccounts[uid]=archive;
+  if(failed)toast("Account removed from login, but "+failed+" item(s) could not be hidden. Check Firebase rules.");
+  else toast("Account deleted from active Prism. It can be recovered until "+new Date(deleteAt).toLocaleString()+".");
+  await loadAdminPanel();
 }
+setInterval(()=>{if(isAdmin())purgeExpiredDeletedAccounts().catch(()=>{});},60000);
 function confirmDeleteServer(sid){
   if(!isAdmin() || sid === "official" || (servers[sid] && servers[sid].officialMark === true)){
     toast("Official servers cannot be deleted.");
@@ -4298,7 +4400,7 @@ function renderMessages(path, typeScope){
     const m = snap.val(); if(!m || !m.u) return;
     const el = document.querySelector('#msgs .msg[data-key="' + snap.key + '"]');
     if(!el) return;
-    el.querySelector(".mx").innerHTML = linkify(m.t || "");
+    el.querySelector(".mx").innerHTML = renderMessageContent(m);
     const mt = el.querySelector(".mt");
     if(m.edited && mt && !mt.querySelector(".edited"))
       mt.insertAdjacentHTML("beforeend", '<span class="edited">(edited)</span>');
@@ -4315,6 +4417,62 @@ function renderMessages(path, typeScope){
   listen(db.ref("prism/pins/" + typeScope), "value", snap => {
     pinData = snap.val() || {};
     paintPins();
+  });
+}
+const CHAT_MEDIA_MAX_BYTES=6*1024*1024;
+let pendingChatMedia=[];
+function allowedChatMediaType(type){
+  return /^image\/(?:png|jpeg|gif|webp|avif)$/i.test(String(type||""))||
+    /^video\/(?:mp4|webm|ogg|quicktime)$/i.test(String(type||""))||
+    /^audio\/[a-z0-9.+-]+$/i.test(String(type||""));
+}
+function safeChatMediaData(data){
+  return /^data:(?:image\/(?:png|jpeg|gif|webp|avif)|video\/(?:mp4|webm|ogg|quicktime)|audio\/[a-z0-9.+-]+);base64,[A-Za-z0-9+/=]+$/i.test(String(data||""));
+}
+function formatMediaSize(bytes){
+  const n=Number(bytes)||0;
+  return n>=1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024))+" KB";
+}
+function renderMessageMedia(media){
+  if(!Array.isArray(media)||!media.length)return "";
+  const rendered=[];
+  media.slice(0,5).forEach(item=>{
+    if(!item||!safeChatMediaData(item.data))return;
+    const src=String(item.data),type=src.slice(5,src.indexOf(";")).toLowerCase();
+    if(!allowedChatMediaType(type))return;
+    const name=esc(String(item.name||"attachment").slice(0,120));
+    if(type.startsWith("image/")){
+      rendered.push('<div class="message-media"><a href="'+src+'" target="_blank" rel="noopener noreferrer" title="'+name+'"><img src="'+src+'" alt="'+name+'" loading="lazy" decoding="async"></a><a class="media-download" href="'+src+'" download="'+name+'">Download '+name+'</a></div>');
+    }else if(type.startsWith("video/")){
+      rendered.push('<div class="message-media"><video controls preload="metadata" playsinline src="'+src+'" aria-label="'+name+'"></video><a class="media-download" href="'+src+'" download="'+name+'">Download '+name+'</a></div>');
+    }else if(type.startsWith("audio/")){
+      rendered.push('<div class="message-media"><audio controls preload="metadata" src="'+src+'" aria-label="'+name+'"></audio><a class="media-download" href="'+src+'" download="'+name+'">Download '+name+'</a></div>');
+    }
+  });
+  return rendered.length?'<div class="message-media-list">'+rendered.join("")+'</div>':"";
+}
+function renderMessageContent(message){
+  return linkify(message&&message.t||"")+renderMessageMedia(message&&message.media);
+}
+function renderPendingChatMedia(){
+  const host=$("media-pending");
+  if(!host)return;
+  host.replaceChildren();
+  host.classList.toggle("hidden",pendingChatMedia.length===0);
+  pendingChatMedia.forEach(item=>{
+    const pill=document.createElement("div");pill.className="pending-media-item";
+    const name=document.createElement("span");name.className="pending-media-name";name.textContent=item.name+" · "+formatMediaSize(item.size);
+    const remove=document.createElement("button");remove.type="button";remove.className="pending-media-remove";remove.textContent="×";remove.title="Remove attachment";remove.setAttribute("aria-label","Remove "+item.name);
+    remove.onclick=()=>{pendingChatMedia=pendingChatMedia.filter(file=>file!==item);renderPendingChatMedia();};
+    pill.append(name,remove);host.appendChild(pill);
+  });
+}
+function readChatFile(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error("Couldn't read "+file.name+"."));
+    reader.onload=()=>resolve(String(reader.result||""));
+    reader.readAsDataURL(file);
   });
 }
 function buildMsgEl(key, m, typeScope, path){
@@ -4338,7 +4496,7 @@ function buildMsgEl(key, m, typeScope, path){
     html += '<div class="rply" title="Jump to message">↩ <b>' + esc(m.reply.u) + "</b> " +
       esc(m.reply.t || "") + "</div>";
   }
-  html += '<div class="mx">' + linkify(m.t || "") + '</div><div class="rxns"></div></div>' +
+  html += '<div class="mx">' + renderMessageContent(m) + '</div><div class="rxns"></div></div>' +
     '<div class="mact">' +
     '<button data-act="react" title="Add reaction" aria-label="Add reaction">😊</button>' +
     '<button data-act="reply" title="Reply" aria-label="Reply"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 15 4 10l5-5M4 10h9a7 7 0 0 1 7 7v2"/></svg></button>' +
@@ -4542,7 +4700,8 @@ function wireInput(){
 }
 function send(){
   const t = $("minput").value.trim();
-  if(!t || !me) return;
+  const uploads=pendingChatMedia.slice();
+  if((!t&&!uploads.length)||!me)return;
   if(view.type==="server" && view.cid && !canServerPermission(view.sid,"sendMessages")){
     toast("You don't have permission to send messages in this server.");
     return;
@@ -4552,6 +4711,7 @@ function send(){
     return;
   }
   const msg = {uid: me.uid, u: me.name, t: t.slice(0, 2000), ts: TS};
+  if(uploads.length)msg.media=uploads.map(file=>({name:String(file.name||"attachment").slice(0,120),type:file.type,size:file.size,data:file.data}));
   const mentionedUids = [];
   const knownMentionUsers = collectMentionUsers();
   const mentionPattern = /(^|[^a-zA-Z0-9_])@([a-zA-Z0-9_]{3,20})(?=$|[^a-zA-Z0-9_])/g;
@@ -4572,38 +4732,60 @@ function send(){
       if(!view.post) return;
       const pid = view.post;
       db.ref("prism/forumReplies/" + view.sid + "/" + view.cid + "/" + pid).push(msg)
-        .catch(() => toast("Couldn't send — check your connection."));
+        .catch(() => toast("Couldn't send — check your connection or reduce the attachment size."));
       db.ref("prism/forum/" + view.sid + "/" + view.cid + "/" + pid + "/replyCount")
         .transaction(c => (c || 0) + 1).catch(() => {});
     }else{
       const commandServerId=view.sid,commandChannelId=view.cid;
       const scope = "s_" + commandServerId + "_" + commandChannelId;
       db.ref("prism/messages/" + commandServerId + "/" + commandChannelId).push(msg)
-        .then(()=>runServerBotCommand(commandServerId,commandChannelId,t).catch(()=>{}))
-        .catch(() => toast("Couldn't send — check your connection."));
+        .then(()=>{if(t)runServerBotCommand(commandServerId,commandChannelId,t).catch(()=>{});})
+        .catch(() => toast("Couldn't send — check your connection or reduce the attachment size."));
       db.ref("prism/typing/" + scope + "/" + me.uid).remove().catch(() => {});
     }
   }else if(view.type === "dm"){
     db.ref("prism/dmMessages/" + view.dmId).push(msg)
-      .catch(() => toast("Couldn't send — check your connection."));
+      .catch(() => toast("Couldn't send — check your connection or reduce the attachment size."));
     db.ref("prism/typing/d_" + view.dmId + "/" + me.uid).remove().catch(() => {});
     const now = Date.now();
     db.ref("prism/userDMs/" + me.uid + "/" + view.otherUid + "/lastTs").set(now).catch(() => {});
     db.ref("prism/userDMs/" + view.otherUid + "/" + me.uid + "/lastTs").set(now).catch(() => {});
   }else if(view.type === "group"){
     db.ref("prism/dmMessages/" + view.dmId).push(msg)
-      .catch(() => toast("Couldn't send — check your connection."));
+      .catch(() => toast("Couldn't send — check your connection or reduce the attachment size."));
     db.ref("prism/typing/d_" + view.dmId + "/" + me.uid).remove().catch(() => {});
     const now = Date.now();
     Object.keys(view.members || {}).forEach(uid=>{
       db.ref("prism/userGroupDMs/" + uid + "/" + view.dmId + "/lastTs").set(now).catch(()=>{});
     });
   }else return;
+  pendingChatMedia=[];
+  renderPendingChatMedia();
+  $("chat-media-input").value="";
   $("minput").value = ""; $("minput").style.height = "auto";
   hideMentionSuggestions();
   clearReply();
 }
-
+$("attach-media-button").onclick=()=>{if(me)$("chat-media-input").click();};
+$("chat-media-input").addEventListener("change",async event=>{
+  const input=event.currentTarget,files=Array.from(input.files||[]);
+  input.value="";
+  if(!files.length)return;
+  if(pendingChatMedia.length+files.length>5){toast("Attach up to 5 files per message.");return;}
+  let total=pendingChatMedia.reduce((sum,item)=>sum+item.size,0);
+  for(const file of files){
+    if(!allowedChatMediaType(file.type)){toast("Unsupported file type: "+file.name);continue;}
+    if(file.size<=0){toast("That file is empty: "+file.name);continue;}
+    if(total+file.size>CHAT_MEDIA_MAX_BYTES){toast("Keep the combined attachments under 6 MB per message.");break;}
+    try{
+      const data=await readChatFile(file);
+      if(!safeChatMediaData(data)){toast("That file format isn't supported: "+file.name);continue;}
+      pendingChatMedia.push({name:file.name,type:file.type,size:file.size,data});
+      total+=file.size;
+    }catch(e){toast(e.message||"Couldn't read that file.");}
+  }
+  renderPendingChatMedia();
+});
 /* ---------------- themes & settings ---------------- */
 let settings = {theme: "dark", accent: "#5865f2", status: "", presenceMode: "online", bio: "", banner: "", css: "", avatar: "", notifications: false, callSounds: {incoming:"default",waiting:"default",join:"default",leave:"default",volume:65}};
 let selTheme = "dark";
@@ -4798,6 +4980,7 @@ async function loadAdminPanel(){
   if(!isAdmin())return;
   $("admin-users-list").innerHTML='<div class="admin-loading">Loading accounts…</div>';
   $("admin-servers-list").innerHTML='<div class="admin-loading">Loading servers…</div>';
+  $("admin-deleted-list").innerHTML='<div class="admin-loading">Loading deleted accounts…</div>';
   try{
     const reads=[
       db.ref("prism/users").once("value"),
@@ -4809,12 +4992,23 @@ async function loadAdminPanel(){
     adminPanelData.presence=snapshots[1].val()||{};
     if(isRootAdmin())adminPanelData.admins=snapshots[2].val()||{};
     adminPanelLoaded=true;
+    try{
+      const deletedSnap=await db.ref("prism/deletedAccounts").once("value");
+      adminPanelData.deletedAccounts=deletedSnap.val()||{};
+      adminDeletedAccountsUnavailable=false;
+      await purgeExpiredDeletedAccounts(adminPanelData.deletedAccounts);
+    }catch(deletedError){
+      adminPanelData.deletedAccounts={};
+      adminDeletedAccountsUnavailable=true;
+      $("admin-deleted-list").innerHTML='<div class="admin-loading">Deleted-account data is unavailable. Firebase rules may need to allow authorized admins to read and write prism/deletedAccounts.</div>';
+    }
     const now=Date.now();
     const online=Object.values(adminPanelData.presence).filter(p=>p&&now-(p.ts||0)<120000).length;
     $("admin-count-users").textContent=String(safeCount(adminPanelData.users));
     $("admin-count-online").textContent=String(online);
     $("admin-count-servers").textContent=String(safeCount(servers));
     renderAdminUsers();
+    renderDeletedAccounts();
     renderAdminServers();
     if(isRootAdmin())renderAdminList();
     $("admin-grant-status").textContent="";
@@ -4824,6 +5018,111 @@ async function loadAdminPanel(){
     $("admin-grant-status").textContent="Admin data couldn't be read. Firebase rules may need to allow authorized admins access.";
     toast("Admin panel couldn't load data. Check Firebase Database Rules.");
   }
+}
+async function purgeDeletedAccount(uid, record, automatic){
+  if(!isAdmin()||!uid||!record)return false;
+  const updates={};
+  updates["prism/deletedAccounts/"+uid]=null;
+  updates["prism/banned/"+uid]={u:String(record.username||record.u||"Deleted user"),ts:Number(record.deletedAt)||Date.now(),deletedAccount:true,permanent:true};
+  (Array.isArray(record.dmIds)?record.dmIds:[]).forEach(id=>{
+    if(/^[A-Za-z0-9_-]{1,128}$/.test(String(id)))updates["prism/dmMessages/"+id]=null;
+  });
+  try{
+    await db.ref().update(updates);
+    if(adminPanelData.deletedAccounts)delete adminPanelData.deletedAccounts[uid];
+    if(!automatic)toast("Deleted account permanently removed from Prism data.");
+    return true;
+  }catch(e){
+    if(!automatic)toast("Couldn't permanently delete the account. Check Firebase rules.");
+    return false;
+  }
+}
+async function purgeExpiredDeletedAccounts(records){
+  if(!isAdmin())return;
+  let source=records;
+  if(!source){
+    const snap=await db.ref("prism/deletedAccounts").once("value");
+    source=snap.val()||{};
+  }
+  const now=Date.now();
+  for(const [uid,record] of Object.entries(source||{})){
+    if(record&&Number(record.deleteAt)>0&&Number(record.deleteAt)<=now){
+      await purgeDeletedAccount(uid,record,true);
+    }
+  }
+}
+async function recoverDeletedAccount(uid){
+  if(!isAdmin()||!uid)return;
+  try{
+    const snap=await db.ref("prism/deletedAccounts/"+uid).once("value");
+    if(!snap.exists()){toast("That deleted account is no longer recoverable.");await loadAdminPanel();return;}
+    const record=snap.val()||{};
+    if(Number(record.deleteAt)>0&&Number(record.deleteAt)<=Date.now()){
+      await purgeDeletedAccount(uid,record,true);
+      toast("The recovery period expired, so the account was permanently removed.");
+      await loadAdminPanel();
+      return;
+    }
+    const username=String(record.username||record.u||"").trim();
+    const lower=username.toLowerCase();
+    if(!validName(username)){toast("This account has an invalid saved username and cannot be restored automatically.");return;}
+    const current=await db.ref("prism/usernames/"+lower).once("value");
+    if(current.exists()&&String(current.val())!==String(uid)){
+      toast("That username has been reused. This deleted account cannot be restored without removing the newer account first.");
+      return;
+    }
+    const updates={};
+    (Array.isArray(record.restoreData)?record.restoreData:[]).forEach(entry=>{
+      if(entry&&typeof entry.path==="string"&&entry.path.startsWith("prism/")&&entry.value!==undefined)updates[entry.path]=entry.value;
+    });
+    updates["prism/users/"+uid]=record.profile||updates["prism/users/"+uid]||{name:username,createdAt:record.createdAt||Date.now(),authEmail:emailOf(lower)};
+    updates["prism/usernames/"+lower]=uid;
+    updates["prism/banned/"+uid]=null;
+    updates["prism/deletedAccounts/"+uid]=null;
+    await db.ref().update(updates);
+    delete adminPanelData.deletedAccounts[uid];
+    toast("@" + username + " was recovered.");
+    await loadAdminPanel();
+  }catch(e){
+    toast("Couldn't recover the account. Check Firebase rules and make sure the username is available.");
+  }
+}
+function confirmPermanentlyDeleteDeletedAccount(uid){
+  if(!isAdmin())return;
+  const record=(adminPanelData.deletedAccounts||{})[uid]||{};
+  const name=String(record.username||record.u||"this account");
+  openModal("Permanently delete account","Permanently erase @" + name + "'s recoverable Prism data now? Their old sign-in will remain blocked.", "", "Permanently delete", ()=>purgeDeletedAccount(uid,record,false));
+  $("m-input").style.display="none";
+}
+function renderDeletedAccounts(){
+  const box=$("admin-deleted-list");
+  if(!box||adminDeletedAccountsUnavailable)return;
+  box.innerHTML="";
+  const query=($("admin-users-search").value||"").trim().toLowerCase();
+  const records=Object.entries(adminPanelData.deletedAccounts||{}).map(([uid,data])=>({
+    uid,record:data||{},name:String((data&&data.username)||(data&&data.u)||"Unknown user")
+  })).filter(row=>!query||row.name.toLowerCase().includes(query))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  $("admin-deleted-label").textContent=records.length+" recoverable account"+(records.length===1?"":"s");
+  if(!records.length){box.innerHTML='<div class="admin-loading">'+(query?"No matching deleted accounts.":"No deleted accounts waiting for recovery.")+'</div>';return;}
+  records.forEach(row=>{
+    const item=document.createElement("div");item.className="admin-data-row";
+    const copy=document.createElement("div");copy.className="admin-data-copy";
+    const name=document.createElement("b");name.textContent="@"+row.name;
+    const meta=document.createElement("span");meta.className="deleted-account-date";
+    const deletedAt=Number(row.record.deletedAt)||0,deleteAt=Number(row.record.deleteAt)||0;
+    meta.textContent="Deleted "+(deletedAt?new Date(deletedAt).toLocaleString():"date unknown")+" · Purge "+(deleteAt?new Date(deleteAt).toLocaleString():"deadline not set");
+    copy.append(name,meta);
+    const actions=document.createElement("div");actions.className="admin-row-actions";
+    const restore=document.createElement("button");restore.type="button";restore.className="admin-recover-button";restore.textContent="Recover";
+    restore.title="Restore this Prism account before its recovery deadline";
+    restore.onclick=()=>recoverDeletedAccount(row.uid);
+    const purge=document.createElement("button");purge.type="button";purge.className="admin-purge-button";purge.textContent="Delete now";
+    purge.title="Permanently remove the deleted account's Prism data now";
+    purge.onclick=()=>confirmPermanentlyDeleteDeletedAccount(row.uid);
+    actions.append(restore,purge);
+    item.append(copy,actions);box.appendChild(item);
+  });
 }
 function renderAdminUsers(){
   const box=$("admin-users-list");
@@ -4835,8 +5134,8 @@ function renderAdminUsers(){
     online:!!(adminPanelData.presence[uid]&&Date.now()-(adminPanelData.presence[uid].ts||0)<120000)
   })).filter(row=>!query||row.name.toLowerCase().includes(query))
     .sort((a,b)=>a.name.localeCompare(b.name));
-  $("admin-users-label").textContent=records.length+" account"+(records.length===1?"":"s");
-  if(!records.length){box.innerHTML='<div class="admin-loading">'+(query?"No matching accounts.":"No accounts found.")+'</div>';return;}
+  $("admin-users-label").textContent=records.length+" active account"+(records.length===1?"":"s");
+  if(!records.length){box.innerHTML='<div class="admin-loading">'+(query?"No matching accounts.":"No active accounts found.")+'</div>';return;}
   records.forEach(row=>{
     const item=document.createElement("div");item.className="admin-data-row";
     const copy=document.createElement("div");copy.className="admin-data-copy";
@@ -4848,7 +5147,7 @@ function renderAdminUsers(){
     action.className="admin-danger-button";
     action.textContent=protectedUser?"Protected":(row.uid===me.uid?"You":"Delete");
     action.disabled=protectedUser||row.uid===me.uid;
-    action.title=action.disabled?"Protected account":"Delete user account";
+    action.title=action.disabled?"Protected account":"Delete account; choose a recovery grace period";
     if(!action.disabled)action.onclick=()=>confirmDeleteUser(row.uid,row.name);
     item.append(copy,action);box.appendChild(item);
   });
@@ -5030,7 +5329,7 @@ function revokeAdmin(uid,name){
 }
 $("admin-grant-button").onclick=grantAdminByUsername;
 $("admin-grant-username").addEventListener("keydown",event=>{if(event.key==="Enter")grantAdminByUsername();});
-$("admin-users-search").addEventListener("input",renderAdminUsers);
+$("admin-users-search").addEventListener("input",()=>{renderAdminUsers();renderDeletedAccounts();});
 $("admin-servers-search").addEventListener("input",renderAdminServers);
 
 let draftBanner = "";
@@ -5678,7 +5977,7 @@ function openModal(title, sub, placeholder, okLabel, cb){
   $("modal").classList.remove("hidden");
   setTimeout(() => $("m-input").focus(), 50);
 }
-function closeModal(){ $("modal").classList.add("hidden"); modalCb = null; }
+function closeModal(){ $("modal").classList.add("hidden"); modalCb = null; const extra=$("delete-account-delay-wrap"); if(extra)extra.remove(); $("m-input").style.display=""; }
 $("m-cancel").onclick = closeModal;
 $("pinbtn").onclick = openPins;
 $("mobile-back").onclick = () => {
